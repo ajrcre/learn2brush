@@ -6,6 +6,9 @@ import { Brush, type BrushLook } from './Brush';
 import { Paste, createTube, type PasteLook } from './Paste';
 import { Foam, Sparkles } from './Effects';
 import { FoodBits } from './Food';
+import { HelperArrows } from './HelperArrows';
+
+export type HintKind = 'outer' | 'inner' | 'chewing' | 'food';
 
 export type Phase = 'home' | 'customize' | 'paste' | 'brush' | 'spit' | 'done';
 export type View = 'front' | 'upper' | 'lower';
@@ -19,6 +22,10 @@ export interface GameEvents {
   pasteAmount: (amount: number) => void;
   bubblePop: () => void;
   rotated: () => void;
+  /** helper arrows appeared (kind of the main spot) or were hidden (null) */
+  hints: (kind: HintKind | null) => void;
+  /** the jaws are turning by themselves to show a missed spot */
+  autoTurn: () => void;
 }
 
 type Handlers = { [K in keyof GameEvents]?: GameEvents[K][] };
@@ -33,6 +40,10 @@ export class Game {
   readonly foam = new Foam();
   readonly food = new FoodBits();
   readonly sparkles = new Sparkles();
+  readonly helpers = new HelperArrows(3);
+  private idle = 0;
+  private hintState: 'none' | 'turning' | 'shown' = 'none';
+  private turnTimer = 0;
   private tube = createTube('#3fb6ff');
 
   /** rotates with user drag */
@@ -76,7 +87,7 @@ export class Game {
   constructor(canvas: HTMLCanvasElement, brushLook: BrushLook, pasteLook: PasteLook) {
     this.stage = new Stage(canvas, detectQuality());
     const { scene } = this.stage;
-    this.content.add(this.jaws.root, this.foam.group, this.food.group);
+    this.content.add(this.jaws.root, this.foam.group, this.food.group, this.helpers.group);
     this.model.add(this.content);
     scene.add(this.model);
     scene.add(this.sparkles.group);
@@ -126,10 +137,9 @@ export class Game {
     this.model.visible = showJaws;
     this.brush.group.visible = p !== 'home' && p !== 'done' && p !== 'spit';
     this.tube.group.visible = p === 'paste';
-    this.paste.mesh.visible = p === 'paste' || (p === 'customize' && this.paste.amount > 0);
-    if (p === 'customize') {
-      this.paste.setAmount(0);
-    }
+    this.paste.mesh.visible = p === 'paste';
+    if (p === 'customize') this.setShowcasePaste(false);
+    this.clearHints();
     if (p === 'paste') {
       this.paste.remaining = 1;
       this.paste.setAmount(0);
@@ -137,6 +147,14 @@ export class Game {
     if (p === 'brush') this.startBrushing();
     if (p === 'spit') { this.spitT = 0; this.mode = 'none'; this.contact = false; }
     if (p === 'home' || p === 'done') this.setView('front');
+  }
+
+  /** In the customiser, show a blob of paste on the brush so the colour can be previewed. */
+  setShowcasePaste(on: boolean) {
+    if (this.phase !== 'customize') return;
+    this.paste.remaining = 1;
+    this.paste.setAmount(on ? 0.55 : 0);
+    this.paste.mesh.visible = on;
   }
 
   /** New brushing session: dirty teeth, food, clear foam. */
@@ -149,6 +167,8 @@ export class Game {
     this.brushingTime = 0;
     this.setView('front');
     this.yawT = 0; this.pitchT = 0.12;
+    this.idle = 0;
+    this.clearHints();
     this.pushProgress();
   }
 
@@ -271,11 +291,13 @@ export class Game {
     const tanHalf = Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2);
     if (this.phase === 'customize') {
       // brush shown in the upper part of the screen, above the selection panel
-      const d = this.fitDistance(portrait ? 125 : 175, 60);
+      // brush sits in the empty band between the category buttons and the carousel
+      const d = this.fitDistance(portrait ? 122 : 200, portrait ? 150 : 125);
       const visH = 2 * d * tanHalf;
-      const cx = portrait ? 50 : 58;
-      this.camTarget.set(cx, -visH * 0.27, 0);
-      this.camPos.set(cx, -visH * 0.27 + 25, d);
+      const cx = portrait ? 42 : 58;
+      const lift = portrait ? 0.19 : 0.13;
+      this.camTarget.set(cx, -visH * lift, 0);
+      this.camPos.set(cx, -visH * lift + 25, d);
     } else if (this.phase === 'paste') {
       const d = this.fitDistance(portrait ? 62 : 90, 70);
       const visH = 2 * d * tanHalf;
@@ -313,6 +335,7 @@ export class Game {
     this.foam.update(dt);
     this.food.update(dt);
     this.sparkles.update(dt);
+    this.helpers.update(dt);
   }
 
   private updateModel(dt: number) {
@@ -340,7 +363,7 @@ export class Game {
   private updateShowcase(dt: number) {
     const g = this.brush.group;
     // bristles up, gently rocking, viewed at an angle
-    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI + 0.35 + Math.sin(this.elapsed * 0.8) * 0.12, Math.sin(this.elapsed * 0.5) * 0.25, 0.05));
+    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI + 0.45 + Math.sin(this.elapsed * 0.8) * 0.1, Math.sin(this.elapsed * 0.5) * 0.2, 0.1));
     g.quaternion.slerp(q, 1 - Math.exp(-6 * dt));
     g.position.lerp(new THREE.Vector3(0, 0, 0), 1 - Math.exp(-6 * dt));
   }
@@ -433,11 +456,144 @@ export class Game {
       this.foam.spawn(lp, ln, intensity, dt);
     }
 
+    this.updateHints(dt);
+
     this.progressTimer += dt;
     if (this.progressTimer > 0.2) {
       this.progressTimer = 0;
       this.pushProgress();
     }
+  }
+
+  // ---------- helper arrows ----------
+  private clearHints() {
+    if (this.hintState !== 'none' || this.helpers.visible) { this.helpers.hide(); this.emit('hints', null); }
+    this.hintState = 'none';
+  }
+
+  private updateHints(dt: number) {
+    if (this.contact || this.mode === 'rotate') { this.idle = 0; this.clearHints(); return; }
+    this.idle += dt;
+    const wait = this.brushingTime < 10 ? 6 : 3.5;
+    if (this.hintState === 'none' && this.idle > wait) this.showHints(false);
+    else if (this.hintState === 'turning') {
+      this.turnTimer -= dt;
+      if (this.turnTimer <= 0) this.showHints(true);
+    }
+  }
+
+  private hintCandidates() {
+    // spots are kept in the mesh's local space so they stay valid when the jaws turn
+    type Cand = { kind: HintKind; priority: number; mesh: THREE.Object3D; space: THREE.Object3D; spots: { p: THREE.Vector3; n: THREE.Vector3 }[] };
+    const cands: Cand[] = [];
+    for (const m of this.food.meshes()) {
+      const n = (m.userData.normal as THREE.Vector3).clone();
+      cands.push({ kind: 'food', priority: 1e6, mesh: m, space: this.food.group, spots: [{ p: m.position.clone(), n }] });
+    }
+    const kinds: HintKind[] = ['outer', 'inner', 'chewing'];
+    for (const t of this.jaws.teeth) {
+      if (t.done || !t.mesh.parent!.visible) continue;
+      const pos = t.mesh.geometry.getAttribute('position');
+      const nrm = t.mesh.geometry.getAttribute('normal');
+      for (let s = 0; s < 3; s++) {
+        if (t.sideDone[s]) continue;
+        const ids: number[] = [];
+        let rem = 0;
+        for (let k = 0; k < t.dirt.length; k++) if (t.sides[k] === s && t.dirt[k] > 0.05) { ids.push(k); rem += t.dirt[k]; }
+        if (rem < 1) continue;
+        ids.sort((a, b) => t.dirt[b] - t.dirt[a]);
+        const step = Math.max(1, Math.floor(ids.length / 10));
+        const spots = [];
+        for (let i = 0; i < ids.length && spots.length < 10; i += step) {
+          const k = ids[i];
+          spots.push({ p: new THREE.Vector3().fromBufferAttribute(pos, k), n: new THREE.Vector3().fromBufferAttribute(nrm, k) });
+        }
+        cands.push({ kind: kinds[s], priority: rem, mesh: t.mesh, space: t.mesh, spots });
+      }
+    }
+    return cands.sort((a, b) => b.priority - a.priority).slice(0, 14);
+  }
+
+  /** A spot of this candidate that the child can see and tap right now, or null. */
+  private visibleSpot(c: { mesh: THREE.Object3D; space: THREE.Object3D; spots: { p: THREE.Vector3; n: THREE.Vector3 }[] }) {
+    const cam = this.stage.camera;
+    if (!c.mesh.parent?.visible) return null;
+    const targets: THREE.Object3D[] = [...this.jaws.toothMeshes.filter(m => m.parent!.visible), ...this.jaws.gums.filter(g => g.parent!.visible), ...this.food.meshes()];
+    for (const local of c.spots) {
+      const sp = { p: local.p.clone().applyMatrix4(c.space.matrixWorld), n: local.n.clone().transformDirection(c.space.matrixWorld) };
+      const toCam = cam.position.clone().sub(sp.p).normalize();
+      if (sp.n.dot(toCam) < 0.15) continue;
+      const ndc = sp.p.clone().project(cam);
+      // keep clear of the top bar and the bottom buttons
+      if (Math.abs(ndc.x) > 0.85 || ndc.y > 0.62 || ndc.y < -0.55) continue;
+      this.ray.setFromCamera(new THREE.Vector2(ndc.x, ndc.y), cam);
+      const h = this.ray.intersectObjects(targets, false)[0];
+      if (!h || h.object !== c.mesh || h.point.distanceTo(sp.p) >= 2) continue;
+      // the whole arrow (out to its tail) must be in clear view, not tucked behind other teeth
+      // lay the arrow mostly across the screen so its shape reads clearly (not end-on to the camera)
+      const n = sp.n.clone().addScaledVector(toCam, -sp.n.dot(toCam));
+      if (n.lengthSq() < 0.05) n.copy(cam.up);
+      n.normalize().addScaledVector(toCam, 0.35).normalize();
+      const tail = sp.p.clone().addScaledVector(n, 18);
+      const tailNdc = tail.clone().project(cam);
+      if (Math.abs(tailNdc.x) > 0.9 || tailNdc.y > 0.7 || tailNdc.y < -0.6) continue;
+      this.ray.set(cam.position, tail.clone().sub(cam.position).normalize());
+      const th = this.ray.intersectObjects(targets, false)[0];
+      if (th && th.distance < cam.position.distanceTo(tail) - 0.5) continue;
+      return { p: sp.p, n };
+    }
+    return null;
+  }
+
+  private withPose<T>(view: View, yaw: number, pitch: number, fn: () => T): T {
+    const saved = { view: this.view, yaw: this.yaw, pitch: this.pitch, yawT: this.yawT, pitchT: this.pitchT, fu: this.focusUpper, fl: this.focusLower, cy: this.contentY };
+    this.view = view; this.yawT = yaw; this.pitchT = pitch;
+    this.updateModel(100);
+    this.model.updateMatrixWorld(true);
+    const r = fn();
+    Object.assign(this, { view: saved.view, yaw: saved.yaw, pitch: saved.pitch, yawT: saved.yawT, pitchT: saved.pitchT, focusUpper: saved.fu, focusLower: saved.fl, contentY: saved.cy });
+    this.updateModel(0);
+    this.model.updateMatrixWorld(true);
+    return r;
+  }
+
+  private showHints(afterTurn: boolean) {
+    const cands = this.hintCandidates();
+    if (!cands.length) { this.hintState = 'shown'; return; }
+    const chosen: { kind: HintKind; p: THREE.Vector3; n: THREE.Vector3 }[] = [];
+    for (const c of cands) {
+      const v = this.visibleSpot(c);
+      if (!v || chosen.some(o => o.p.distanceTo(v.p) < 9)) continue;
+      chosen.push({ kind: c.kind, ...v });
+      if (chosen.length >= 3) break;
+    }
+    if (chosen.length) {
+      const inv = new THREE.Matrix4().copy(this.content.matrixWorld).invert();
+      this.helpers.show(chosen.map(o => ({ point: o.p.clone().applyMatrix4(inv), normal: o.n.clone().transformDirection(inv) })));
+      this.hintState = 'shown';
+      this.emit('hints', chosen[0].kind);
+      return;
+    }
+    if (afterTurn) { this.hintState = 'shown'; this.emit('hints', cands[0].kind); return; }
+    // nothing visible: turn the jaws by themselves to show the most important spot
+    const views: View[] = cands[0].kind === 'inner' || cands[0].kind === 'chewing'
+      ? (this.jaws.teeth.find(t => t.mesh === cands[0].mesh)?.jaw === 'upper' ? ['upper', 'front', 'lower'] : ['lower', 'front', 'upper'])
+      : ['front', 'upper', 'lower'];
+    for (const v of views) {
+      const base = v === 'front' ? 0.12 : v === 'upper' ? -1.05 : 1.05;
+      for (const yaw of [0, -0.6, 0.6, -1.1, 1.1]) {
+        const ok = this.withPose(v, yaw, base, () => cands.slice(0, 4).some(c => this.visibleSpot(c)));
+        if (ok) {
+          this.view = v; this.yawT = yaw; this.pitchT = base;
+          this.hintState = 'turning';
+          this.turnTimer = 1.0;
+          this.emit('autoTurn');
+          return;
+        }
+      }
+    }
+    this.hintState = 'shown';
+    this.emit('hints', cands[0].kind);
   }
 
   private pushProgress() {

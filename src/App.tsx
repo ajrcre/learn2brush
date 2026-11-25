@@ -1,28 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Game } from './game/Game';
-import type { SideProgress } from './game/jaws/HumanJaws';
-import type { BrushLook } from './game/Brush';
-import type { PasteLook } from './game/Paste';
-import { useStore, type Profile } from './state/store';
-import { CATALOG, item, nextGoal, type Category, type Item } from './config/economy';
+import { useStore } from './state/store';
+import { nextGoal, type Item } from './config/economy';
 import { useT } from './i18n/ui';
 import { audio, haptic } from './audio/audio';
-import { ToothMap } from './ui/ToothMap';
+import { Customizer, Swatch } from './ui/Customizer';
+import { looks } from './ui/looks';
+import type { HintKind } from './game/Game';
 
 const SFX = ['scrub_loop', 'electric_loop', 'foam_loop', 'squeeze', 'bubble_pop', 'food_pop', 'tooth_ding', 'spit', 'applause', 'star_tick', 'fanfare', 'tap', 'locked', 'whoosh'];
 const VOICE = ['welcome', 'choose', 'paste_instruct', 'paste_good', 'paste_too_much', 'paste_too_little', 'brush_start', 'hint_inside', 'hint_outside', 'hint_chewing', 'hint_circles', 'hint_rotate', 'hint_food', 'praise_1', 'praise_2', 'praise_3', 'halfway', 'almost', 'spit', 'finish', 'stars', 'unlock', 'locked', 'fact_twice', 'fact_baby'];
-
-function looks(p: Profile): { brush: BrushLook; paste: PasteLook } {
-  const h = item(p.equipped.handle), b = item(p.equipped.bristles), pa = item(p.equipped.paste);
-  return {
-    brush: { type: p.equipped.brushType === 'type_electric' ? 'electric' : 'manual', handle: h.colors, accent: h.colors.length > 1 ? h.colors[1] : shade(h.colors[0]), bristles: b.colors, sparkle: h.sparkle },
-    paste: { colors: pa.colors, sparkle: pa.sparkle },
-  };
-}
-function shade(hex: string) {
-  if (hex.toLowerCase() === '#f2f4f7') return '#7fd3f0';
-  return hex;
-}
 
 let gameSingleton: Game | null = null;
 
@@ -87,7 +74,7 @@ export default function App() {
       {loaded && game && (
         <>
           {screen === 'home' && <Home />}
-          {(screen === 'choose' || screen === 'shop') && <Locker mode={screen} />}
+          {(screen === 'choose' || screen === 'shop') && <Customizer game={game} mode={screen} top={<TopBar back={() => useStore.getState().go('home')} />} />}
           {screen === 'paste' && <PasteStep game={game} />}
           {screen === 'brush' && <BrushStep game={game} />}
           {screen === 'celebrate' && <Celebrate />}
@@ -154,95 +141,6 @@ function GoalBar({ goal, stars }: { goal: Item; stars: number }) {
   );
 }
 
-function Swatch({ it }: { it: Item }) {
-  const bg = it.colors.length > 1 ? `linear-gradient(135deg, ${it.colors.join(',')})` : it.colors[0];
-  return <span className={`swatch ${it.sparkle ? 'sparkle' : ''}`} style={{ background: bg }} />;
-}
-
-const TABS: { cat: Category; icon: string; key: 'jaw' | 'brushType' | 'handle' | 'bristles' | 'paste' }[] = [
-  { cat: 'jaw', icon: '😁', key: 'jaw' },
-  { cat: 'brushType', icon: '🪥', key: 'brushType' },
-  { cat: 'handle', icon: '🎨', key: 'handle' },
-  { cat: 'bristles', icon: '✨', key: 'bristles' },
-  { cat: 'paste', icon: '🧴', key: 'paste' },
-];
-
-/** Customiser + prize shop in one: owned items equip, locked items show price; affordable ones can be unlocked. */
-function Locker({ mode }: { mode: 'choose' | 'shop' }) {
-  const t = useT();
-  const { lang, profile, owns, equip, buy, go, debugUnlockAll, setDebug } = useStore();
-  const [tab, setTab] = useState<Category>(mode === 'shop' ? 'jaw' : 'handle');
-  const [confirm, setConfirm] = useState<Item | null>(null);
-  const [burst, setBurst] = useState<string | null>(null);
-  const items = CATALOG.filter(i => i.cat === tab);
-
-  const tap = (it: Item) => {
-    if (owns(it.id)) {
-      if (it.comingSoon) { void audio.sfx('locked'); return; }
-      void audio.sfx('tap'); equip(it.cat, it.id); haptic(10); return;
-    }
-    if (it.comingSoon || profile.stars < it.price) { void audio.sfx('locked'); void audio.say('locked'); haptic([20, 40, 20]); return; }
-    void audio.sfx('tap');
-    setConfirm(it);
-  };
-  const doBuy = (it: Item) => {
-    if (buy(it.id)) {
-      void audio.sfx('fanfare');
-      void audio.say('unlock', { priority: true });
-      haptic([30, 50, 80]);
-      setBurst(it.id);
-      setTimeout(() => setBurst(null), 1600);
-    }
-    setConfirm(null);
-  };
-
-  return (
-    <div className="overlay locker">
-      <TopBar back={() => go('home')} />
-      <h2 className="screen-title">{mode === 'shop' ? `🎁 ${t('shop')}` : t('choose')}</h2>
-      <div className="panel">
-        <div className="tabs" role="tablist">
-          {TABS.map(tb => (
-            <button key={tb.cat} role="tab" aria-selected={tab === tb.cat} className={tab === tb.cat ? 'on' : ''} onClick={() => { void audio.sfx('tap'); setTab(tb.cat); }}>
-              <span className="icon">{tb.icon}</span><span className="lbl">{t(tb.key)}</span>
-            </button>
-          ))}
-        </div>
-        <div className="grid">
-          {items.map(it => {
-            const own = owns(it.id);
-            const equipped = profile.equipped[it.cat] === it.id;
-            const afford = profile.stars >= it.price;
-            return (
-              <button key={it.id} className={`card ${equipped ? 'equipped' : ''} ${own ? 'own' : 'locked'} ${afford && !own && !it.comingSoon ? 'afford' : ''} ${burst === it.id ? 'burst' : ''}`} onClick={() => tap(it)}>
-                <span className="art">{it.emoji && (it.cat === 'jaw' || it.cat === 'brushType') ? <span className="emoji">{it.emoji}</span> : <Swatch it={it} />}</span>
-                <span className="name">{it.name[lang]}</span>
-                {!own && <span className="price">{it.comingSoon ? `🔒 ${t('soon')}` : `🔒 ⭐${it.price}`}</span>}
-                {equipped && <span className="check">✔</span>}
-              </button>
-            );
-          })}
-        </div>
-        <label className="debug"><input type="checkbox" checked={debugUnlockAll} onChange={e => setDebug(e.target.checked)} /> {t('unlockAll')}</label>
-      </div>
-      {mode === 'choose' && (
-        <div className="bottom">
-          <button className="big go" onClick={() => { void audio.sfx('whoosh'); go('paste'); void audio.say('paste_instruct', { priority: true }); }}>{t('next')} ▶</button>
-        </div>
-      )}
-      {confirm && (
-        <div className="modal" onClick={() => setConfirm(null)}>
-          <div className="modal-card" onClick={e => e.stopPropagation()}>
-            <span className="art big">{confirm.emoji ?? <Swatch it={confirm} />}</span>
-            <h3>{confirm.name[lang]}</h3>
-            <button className="big go" onClick={() => doBuy(confirm)}>🔓 ⭐{confirm.price}</button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function PasteStep({ game }: { game: Game }) {
   const t = useT();
   const go = useStore(s => s.go);
@@ -294,8 +192,8 @@ const PRAISE = ['praise_1', 'praise_2', 'praise_3'];
 function BrushStep({ game }: { game: Game }) {
   const t = useT();
   const { go, finishSession } = useStore();
-  const [teeth, setTeeth] = useState<SideProgress[]>(() => game.jaws.teeth.map(() => ({ outer: 0, inner: 0, chewing: 0, done: false })));
   const [overall, setOverall] = useState(0);
+  const [doneCount, setDoneCount] = useState(0);
   const [view, setView] = useState(game.view);
   const state = useRef({ lastDone: performance.now(), start: performance.now(), halfway: false, almost: false, rotated: false, foodHint: false, circles: false, food: 0, finished: false, doneCount: 0 });
   const electric = useStore(s => s.profile.equipped.brushType === 'type_electric');
@@ -305,7 +203,7 @@ function BrushStep({ game }: { game: Game }) {
     void audio.say('brush_start', { priority: true });
     const offs = [
       game.on('progress', (list, o) => {
-        setTeeth(list); setOverall(o);
+        setOverall(o); setDoneCount(list.filter(x => x.done).length);
         if (o >= 0.5 && !s.halfway) { s.halfway = true; void audio.say('halfway'); }
       }),
       game.on('toothDone', (_i, n) => {
@@ -324,6 +222,13 @@ function BrushStep({ game }: { game: Game }) {
       }),
       game.on('bubblePop', () => { if (Math.random() < 0.4) void audio.sfx('bubble_pop', 0.25, 0.8 + Math.random() * 0.6); }),
       game.on('rotated', () => { s.rotated = true; }),
+      game.on('hints', (kind: HintKind | null) => {
+        if (!kind) return;
+        const line = kind === 'food' ? 'hint_food' : kind === 'inner' ? 'hint_inside' : kind === 'chewing' ? 'hint_chewing' : 'hint_outside';
+        void audio.say(line, { cooldown: 8 });
+        void audio.sfx('tooth_ding', 0.35, 1.4);
+      }),
+      game.on('autoTurn', () => { void audio.sfx('whoosh', 0.7); setView(game.view); }),
       game.on('allClean', () => {
         if (s.finished) return;
         s.finished = true;
@@ -339,19 +244,10 @@ function BrushStep({ game }: { game: Game }) {
         }, 3200);
       }),
     ];
-    // voice hints
+    // the helper arrows carry the "where to brush" hints; the voice adds one technique tip
     const iv = setInterval(() => {
-      const now = performance.now();
-      const since = (now - s.lastDone) / 1000;
-      const elapsed = (now - s.start) / 1000;
-      if (s.finished) return;
-      if (!s.circles && elapsed > 14 && !electric) { s.circles = true; void audio.say('hint_circles'); return; }
-      if (!s.foodHint && elapsed > 25 && game.food.remaining > 0) { s.foodHint = true; void audio.say('hint_food'); return; }
-      if (since > 12 && elapsed > 10) {
-        const side = game.dirtiestSide();
-        if (side === 'inner' && !s.rotated) void audio.say('hint_rotate', { cooldown: 25 });
-        else void audio.say(side === 'inner' ? 'hint_inside' : side === 'chewing' ? 'hint_chewing' : 'hint_outside', { cooldown: 15 });
-      }
+      const elapsed = (performance.now() - s.start) / 1000;
+      if (!s.finished && !s.circles && elapsed > 14 && !electric) { s.circles = true; void audio.say('hint_circles'); }
     }, 1500);
     return () => {
       offs.forEach(f => f()); clearInterval(iv);
@@ -360,13 +256,13 @@ function BrushStep({ game }: { game: Game }) {
   }, [game]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pick = (v: 'front' | 'upper' | 'lower') => { void audio.sfx('whoosh', 0.6); game.setView(v); setView(v); state.current.rotated = true; };
-  const done = teeth.filter(x => x.done).length;
   return (
     <div className="overlay brush">
       <TopBar back={() => go('home')} />
-      <div className="progress-wrap">
-        <ToothMap teeth={teeth} />
-        <div className="progress"><div style={{ width: `${overall * 100}%` }} /><span>{done}/{teeth.length}</span></div>
+      <div className="sparkle-meter" aria-label={`${doneCount}/${game.jaws.teeth.length}`}>
+        <span className="tooth-ico">🦷</span>
+        <div className="track"><div style={{ width: `${overall * 100}%` }} /></div>
+        <span className="tooth-ico">✨</span>
       </div>
       <div className="views">
         <button className={view === 'upper' ? 'on' : ''} onClick={() => pick('upper')} aria-label={t('top')}><ViewIcon kind="upper" /></button>

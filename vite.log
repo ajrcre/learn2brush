@@ -3,3 +3,17 @@
 
   ➜  Local:   http://localhost:5173/
   ➜  Network: http://192.0.2.2:5173/
+3:08:29 PM [vite] (client) hmr update /src/App.tsx
+3:09:31 PM [vite] (client) hmr update /src/App.tsx
+3:09:31 PM [vite] (client) hmr update /src/ui/ToothMap.tsx
+3:09:55 PM [vite] (client) hmr update /src/styles.css
+3:10:03 PM [vite] (client) hmr update /src/styles.css
+3:11:13 PM [vite] (client) hmr update /src/App.tsx
+3:11:56 PM [vite] (client) hmr update /src/App.tsx
+3:13:57 PM [vite] (client) hmr update /src/App.tsx
+3:13:57 PM [vite] (client) hmr update /src/App.tsx
+3:14:40 PM [vite] (client) hmr update /src/App.tsx
+3:14:40 PM [vite] (client) hmr update /src/App.tsx
+3:15:15 PM [vite] (client) hmr update /src/App.tsx
+3:15:15 PM [vite] (client) hmr update /src/App.tsx
+3:15:41 PM [vite] (client) hmr update /src/App.tsx
