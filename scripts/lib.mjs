@@ -93,3 +93,35 @@ export async function geminiImage({ prompt, model = 'gemini-3-pro-image', aspect
     return { buf: Buffer.from(part.inlineData.data, 'base64'), mime: part.inlineData.mimeType };
   });
 }
+
+/** Gemini TTS → mp3 (via ffmpeg). `style` is a short spoken-style instruction. */
+export async function geminiTTS({ text, voice = 'Leda', model = 'gemini-3.8-flash-tts', style = 'Read aloud in a warm, cheerful, gentle voice for young children:' }) {
+  const { execFileSync } = await import('node:child_process');
+  const os = await import('node:os');
+  const fsm = await import('node:fs');
+  const pathm = await import('node:path');
+  return retry(async () => {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+      method: 'POST',
+      headers: { 'x-goog-api-key': process.env.GEMINI_API_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: `${style}\n${text}` }] }],
+        generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } } },
+      }),
+    });
+    if (!res.ok) throw new Error(`GTTS ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    const j = await res.json();
+    const part = j.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData;
+    if (!part) throw new Error('No audio');
+    const dir = fsm.mkdtempSync(pathm.join(os.tmpdir(), 'gtts-'));
+    const raw = Buffer.from(part.data, 'base64');
+    const isWav = raw.subarray(0, 4).toString() === 'RIFF';
+    const inp = pathm.join(dir, isWav ? 'a.wav' : 'a.pcm');
+    fsm.writeFileSync(inp, raw);
+    const out = pathm.join(dir, 'a.mp3');
+    const args = isWav ? ['-loglevel', 'error', '-y', '-i', inp, '-b:a', '128k', out]
+      : ['-loglevel', 'error', '-y', '-f', 's16le', '-ar', '24000', '-ac', '1', '-i', inp, '-b:a', '128k', out];
+    execFileSync('ffmpeg', args);
+    return fsm.readFileSync(out);
+  });
+}
