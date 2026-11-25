@@ -1,0 +1,30 @@
+{
+  "_note": "Spoken lines. Hebrew is written with full Nikud and sent to ElevenLabs as-is. Lines are gender-neutral (impersonal plural / exclamations). Needs native-speaker review.",
+  "lines": {
+    "welcome":         { "en": "Hi there! Ready to make those teeth sparkle?", "he": "שָׁלוֹם! מוּכָנִים לְהַבְרִיק אֶת הַשִּׁנַּיִם?" },
+    "choose":          { "en": "Pick your toothbrush and your toothpaste!", "he": "בּוֹחֲרִים מִבְרֶשֶׁת וּמִשְׁחַת שִׁנַּיִם!" },
+    "paste_instruct":  { "en": "Press and hold to put toothpaste on the brush. Just a pea-size!", "he": "לוֹחֲצִים וּמַחֲזִיקִים כְּדֵי לָשִׂים מִשְׁחָה עַל הַמִּבְרֶשֶׁת. רַק בְּגֹדֶל שֶׁל אֲפוּנָה!" },
+    "paste_good":      { "en": "Perfect! Just the right amount.", "he": "מֻשְׁלָם! בְּדִיּוּק הַכַּמּוּת הַנְּכוֹנָה." },
+    "paste_too_much":  { "en": "Whoa, that's a lot! A pea-size is enough.", "he": "וָואוּ, זֶה הַרְבֵּה! מַסְפִּיק בְּגֹדֶל שֶׁל אֲפוּנָה." },
+    "paste_too_little":{ "en": "A little more toothpaste!", "he": "עוֹד קְצָת מִשְׁחָה!" },
+    "brush_start":     { "en": "Let's brush! Clean every tooth on the outside, the inside, and the chewing side.", "he": "יַאלְלָה מְצַחְצְחִים! מְנַקִּים כׇּל שֵׁן מִבַּחוּץ, מִבִּפְנִים, וּבַצַּד שֶׁלּוֹעֲסִים אִתּוֹ." },
+    "hint_inside":     { "en": "Don't forget the inside!", "he": "לֹא לִשְׁכֹּחַ אֶת הַצַּד הַפְּנִימִי!" },
+    "hint_outside":    { "en": "Now the outside of the teeth!", "he": "עַכְשָׁו הַצַּד הַחִיצוֹנִי שֶׁל הַשִּׁנַּיִם!" },
+    "hint_chewing":    { "en": "Brush the chewing side too!", "he": "גַּם אֶת הַצַּד שֶׁלּוֹעֲסִים אִתּוֹ!" },
+    "hint_circles":    { "en": "Little circles, nice and gentle.", "he": "עִגּוּלִים קְטַנִּים, בַּעֲדִינוּת." },
+    "hint_rotate":     { "en": "Turn the teeth around to see more!", "he": "מְסוֹבְבִים אֶת הַשִּׁנַּיִם כְּדֵי לִרְאוֹת עוֹד!" },
+    "hint_food":       { "en": "Oh! There's food stuck there!", "he": "אוֹי! יֵשׁ שָׁם אֹכֶל תָּקוּעַ!" },
+    "praise_1":        { "en": "Great job!", "he": "כׇּל הַכָּבוֹד!" },
+    "praise_2":        { "en": "Wow, so shiny!", "he": "וָואוּ, אֵיזֶה בָּרָק!" },
+    "praise_3":        { "en": "Awesome!", "he": "אֵיזֶה יֹפִי!" },
+    "halfway":         { "en": "Halfway there! Keep going!", "he": "חֲצִי דֶּרֶךְ! מַמְשִׁיכִים!" },
+    "almost":          { "en": "Almost done! Just a few more.", "he": "כִּמְעַט סִיַּמְנוּ! עוֹד קְצָת." },
+    "spit":            { "en": "All clean! Now spit out the foam.", "he": "הַכֹּל נָקִי! עַכְשָׁו יוֹרְקִים אֶת הַקֶּצֶף." },
+    "finish":          { "en": "Sparkly clean! Great job!", "he": "נָקִי וּמַבְרִיק! כׇּל הַכָּבוֹד!" },
+    "stars":           { "en": "You got new stars!", "he": "יֵשׁ כּוֹכָבִים חֲדָשִׁים!" },
+    "unlock":          { "en": "Yay! You unlocked something new!", "he": "יֵשׁ! נִפְתַּח פְּרָס חָדָשׁ!" },
+    "locked":          { "en": "Collect more stars to open this one!", "he": "צָרִיךְ עוֹד כּוֹכָבִים כְּדֵי לִפְתֹּחַ אֶת זֶה!" },
+    "fact_twice":      { "en": "Brush two times every day, in the morning and at night!", "he": "מְצַחְצְחִים פַּעֲמַיִם בְּכׇל יוֹם, בַּבֹּקֶר וּבָעֶרֶב!" },
+    "fact_baby":       { "en": "Baby teeth save the space for your big teeth!", "he": "שִׁנֵּי הֶחָלָב שׁוֹמְרוֹת מָקוֹם לַשִּׁנַּיִם הַגְּדוֹלוֹת!" }
+  }
+}

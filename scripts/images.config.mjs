@@ -1,0 +1,7 @@
+// Image prompts (Gemini). Kept text-free; titles are overlaid in code so they can be localised.
+const STYLE = 'Polished high-end 3D animated film look, soft studio lighting, clean, friendly, appealing to children aged 3-6, not scary, no text, no letters, no watermark.';
+export const IMAGES = {
+  bg_bathroom: { aspectRatio: '16:9', prompt: `A softly blurred, dreamy children's bathroom background with shallow depth of field: pastel mint and sky-blue tiles, a round mirror, a cup with toothbrushes, rubber duck, floating soap bubbles catching light, warm morning sunlight. Center of the image is calm and uncluttered (a 3D object will be placed there). ${STYLE}` },
+  og_image:    { aspectRatio: '16:9', prompt: `Hero image for a kids' tooth-brushing game: a gleaming set of cute healthy baby teeth on pink gums in the center-right, a colorful child's toothbrush with a swirl of toothpaste, sparkling foam bubbles and little stars, pastel mint/sky-blue background. Leave the left third clear for a title. ${STYLE}` },
+  app_icon:    { aspectRatio: '1:1', prompt: `Full-bleed square app icon artwork that fills the entire canvas edge to edge (NO rounded corners, NO border, NO frame, NO inner tile): a single shiny happy white tooth with a tiny sparkle, next to a small colorful toothbrush with a blob of mint toothpaste, on a smooth rounded mint-to-sky-blue gradient. Bold, simple silhouette that reads well at small sizes, centered with generous padding. ${STYLE}` },
+};
