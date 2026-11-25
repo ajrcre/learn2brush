@@ -60,9 +60,9 @@ export const CATALOG: Item[] = [
   // shapes
   { id: 'shape_classic', cat: 'shape', price: 0, name: { en: 'Classic', he: 'רְגִילָה' }, colors: ['#ffffff'], emoji: '🪥', shape: 'classic' },
   { id: 'shape_rocket', cat: 'shape', price: 120, name: { en: 'Rocket', he: 'טִיל' }, colors: ['#ffffff'], emoji: '🚀', shape: 'rocket' },
-  { id: 'shape_dino', cat: 'shape', price: 300, name: { en: 'Dinosaur', he: 'דִּינוֹזָאוּר' }, colors: ['#ffffff'], emoji: '🦖', shape: 'dino', status: 'review' },
+  { id: 'shape_dino', cat: 'shape', price: 300, name: { en: 'Dinosaur', he: 'דִּינוֹזָאוּר' }, colors: ['#ffffff'], emoji: '🦖', shape: 'dino' },
   { id: 'shape_shark', cat: 'shape', price: 160, name: { en: 'Shark', he: 'כָּרִישׁ' }, colors: ['#ffffff'], emoji: '🦈', shape: 'shark' },
-  { id: 'shape_wand', cat: 'shape', price: 180, name: { en: 'Magic wand', he: 'שַׁרְבִיט קֶסֶם' }, colors: ['#ffffff'], emoji: '🪄', shape: 'wand', status: 'review' },
+  { id: 'shape_wand', cat: 'shape', price: 180, name: { en: 'Magic wand', he: 'שַׁרְבִיט קֶסֶם' }, colors: ['#ffffff'], emoji: '🪄', shape: 'wand' },
   { id: 'shape_sword', cat: 'shape', price: 250, name: { en: 'Sword', he: 'חֶרֶב' }, colors: ['#ffffff'], emoji: '🗡️', shape: 'sword' },
   // handles
   { id: 'handle_white', cat: 'handle', price: 0, name: { en: 'Snow white', he: 'לָבָן' }, colors: ['#f2f4f7'] },
