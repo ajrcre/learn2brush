@@ -72,10 +72,10 @@ def main(path: str):
             dst = ROOT / 'assets' / 'icon-source.png'
             im.save(dst)
             subprocess.run(['node', str(ROOT / 'scripts' / 'rasterize-icons.cjs'), str(dst)], check=True)
-        elif kind == 'vline':
-            # narrator line: vline:<lang>:<lineId>
+        elif kind in ('vline', 'vline2'):
+            # narrator line: vline:<lang>:<lineId> (recorded per line) / vline2 (cut from earlier sample reels)
             lang, _, line_id = ident.partition(':')
-            src = REVIEW / 'voice-r2' / lang / f'{line_id}.mp3'
+            src = REVIEW / ('voice-r2' if kind == 'vline' else 'voice-r2b') / lang / f'{line_id}.mp3'
             dst = ROOT / 'public' / 'audio' / lang / f'{line_id}.mp3'
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(src, dst)
