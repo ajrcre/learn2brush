@@ -40,7 +40,6 @@ export function looks(p: Profile, override: Partial<Record<Category, string>> = 
       sparkle: pa.sparkle,
       glitter: pu ? pa.glitter : 0,
       glow: pa.glow,
-      style: pa.pasteStyle,
       stripes: pa.stripes ?? 'legacy',
     },
   };

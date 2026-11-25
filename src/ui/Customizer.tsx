@@ -31,7 +31,6 @@ function swatchBackground(it: Item): string {
     case 'galaxy': return 'radial-gradient(circle at 30% 30%, #fff 0 1.5px, transparent 2.5px) 0 0/13px 13px, radial-gradient(circle at 70% 60%, #e04fd6 0 20%, transparent 55%), linear-gradient(135deg, #0b0a2e, #4b1d8f)';
     case 'glitter': return `radial-gradient(circle, #fff 0 1.5px, transparent 2.5px) 0 0/8px 8px, radial-gradient(circle, rgba(255,255,255,.7) 0 1px, transparent 2px) 4px 4px/8px 8px, linear-gradient(135deg, ${c[0]}, ${c[1] ?? c[0]})`;
   }
-  if (it.cat === 'paste' && it.pasteStyle === 'cubes') return `${grid}, conic-gradient(${c[0]} 0 25%, ${c[1]} 0 50%, ${c[2]} 0 75%, ${c[3]} 0) 0 0/18px 18px`;
   if (it.cat === 'paste' && it.stripes === 'even' && c.length > 1) {
     const w = 7;
     return `repeating-linear-gradient(45deg, ${c.map((col, i) => `${col} ${i * w}px ${(i + 1) * w}px`).join(', ')})`;
@@ -40,7 +39,7 @@ function swatchBackground(it: Item): string {
 }
 
 export function Swatch({ it, size = 'md' }: { it: Item; size?: 'md' | 'lg' }) {
-  const square = it.pattern?.startsWith('pixel') || it.pasteStyle === 'cubes';
+  const square = it.pattern?.startsWith('pixel');
   const sparkly = it.sparkle || (it.glitter ?? 0) > 0;
   return <span className={`swatch ${size} ${sparkly ? 'sparkle' : ''} ${square ? 'square' : ''} ${it.glow ? 'glow' : ''}`} style={{ background: swatchBackground(it), ['--glow' as string]: it.colors[0] }} />;
 }

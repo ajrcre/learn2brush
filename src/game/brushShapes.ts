@@ -1,8 +1,7 @@
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { addGlitter } from './patterns';
 
-export type ShapeId = 'classic' | 'sword' | 'rocket' | 'dino' | 'shark' | 'wand' | 'unicorn' | 'blocky';
+export type ShapeId = 'classic' | 'sword' | 'rocket' | 'dino' | 'shark' | 'wand';
 
 /** Where things can be attached: handle-local space, X along the handle (0 = neck, length = end), +Y = back of the handle. */
 export interface HandleInfo {
@@ -20,8 +19,10 @@ export interface ShapeParts {
   update?: (t: number) => void;
   /** sword: x below this renders as a metal blade */
   bladeEnd?: number;
-  /** replaces the handle geometry (blocky) */
-  handleGeometry?: THREE.BufferGeometry;
+  /** parts mounted on the brush head (brush-local space: bristle tips at y=0, head slab y≈9–12.2, x −10.5…10.5) */
+  headObjects?: THREE.Object3D[];
+  /** the shape brings its own handle look (e.g. dinosaur skin) */
+  pattern?: { pattern: 'dinoSkin'; colors: string[] };
 }
 
 const gold = () => {
@@ -146,25 +147,114 @@ export function buildShape(shape: ShapeId, h: HandleInfo): ShapeParts {
     }
 
     case 'dino': {
-      const plateMat = glossy('#3fcf5f', { sheen: 0.6, sheenColor: new THREE.Color('#b8ffb0') });
-      const n = 9;
+      // a friendly dinosaur: skull over the brush head (the bristles are its teeth), back plates, curled spiky tail
+      const skin = h.material;
+      const head = new THREE.Group();
+      const skullGeo = new THREE.SphereGeometry(1, 48, 32);
+      const sp = skullGeo.getAttribute('position');
+      for (let i = 0; i < sp.count; i++) {
+        let x = sp.getX(i), y = sp.getY(i), z = sp.getZ(i);
+        const fx = (x + 1) / 2;                      // 0 = snout tip, 1 = back of the head
+        const snout = 0.6 + 0.4 * Math.pow(fx, 0.6); // narrower snout
+        x *= 17.5;
+        z *= 7.6 * snout;
+        y = y < 0 ? y * 1.3 : y * (5.2 + 5.6 * Math.pow(fx, 1.5)); // flat jaw line, big domed skull at the back
+        // brow ridges above the eyes, nostril bumps at the front, cheek bulges
+        const brow = Math.exp(-((x - 5.5) ** 2) / 10) * Math.exp(-((Math.abs(z) - 4.6) ** 2) / 3) * 2.4;
+        const nose = Math.exp(-((x + 14.5) ** 2) / 3) * Math.exp(-((Math.abs(z) - 2.2) ** 2) / 1.2) * 1.2;
+        const cheek = Math.exp(-((x - 8) ** 2) / 14) * Math.exp(-(y ** 2) / 6) * 1.4;
+        z += Math.sign(z) * cheek;
+        if (y > 0) y += brow + nose;
+        sp.setXYZ(i, x, y, z);
+      }
+      skullGeo.computeVertexNormals();
+      const skull = new THREE.Mesh(skullGeo, skin);
+      skull.position.set(-2, 12.6, 0);
+      head.add(skull);
+      const eyeW = glossy('#ffffff'), pupilM = new THREE.MeshBasicMaterial({ color: '#141414' });
+      for (const s2 of [-1, 1]) {
+        const eye = new THREE.Mesh(new THREE.SphereGeometry(2.8, 20, 14), eyeW);
+        eye.position.set(4.6, 19.2, 5.0 * s2);
+        const pupil = new THREE.Mesh(new THREE.SphereGeometry(1.5, 14, 10), pupilM);
+        pupil.position.set(-0.8, 0.4, 1.9 * s2);
+        const shine = new THREE.Mesh(new THREE.SphereGeometry(0.45, 8, 6), new THREE.MeshBasicMaterial({ color: '#ffffff' }));
+        shine.position.set(-1.2, 1.2, 2.8 * s2);
+        eye.add(pupil, shine);
+        head.add(eye);
+        const nostril = new THREE.Mesh(new THREE.SphereGeometry(0.55, 10, 8), pupilM);
+        nostril.position.set(-15.6, 15.6, 2.1 * s2);
+        head.add(nostril);
+        // mouth line along the jaw, two little fangs at the front, cheek spikes
+        const lip = new THREE.Mesh(new THREE.CapsuleGeometry(0.35, 22, 4, 8), new THREE.MeshBasicMaterial({ color: '#1f4d22' }));
+        lip.rotation.z = Math.PI / 2;
+        lip.position.set(-3, 12.8, 6.4 * s2 * 0.92);
+        head.add(lip);
+        const fang = new THREE.Mesh(new THREE.ConeGeometry(0.9, 3.2, 10), glossy('#fffaf0'));
+        fang.rotation.z = Math.PI;
+        fang.position.set(-13, 11.2, 2.6 * s2);
+        head.add(fang);
+        for (let k = 0; k < 3; k++) {
+          const cs = new THREE.Mesh(new THREE.ConeGeometry(0.8, 3, 8), glossy('#ff8a3d'));
+          cs.position.set(10 + k * 2.6, 15 + k * 1.2, 7.4 * s2);
+          cs.rotation.x = s2 * 1.3;
+          head.add(cs);
+        }
+      }
+      // little horn bumps on top of the head
+      for (const [x, ht, y] of [[-1, 3, 21.6], [4, 4, 23.2], [9, 4.4, 23.6], [13.5, 3.4, 22.2]] as const) {
+        const bump = new THREE.Mesh(new THREE.ConeGeometry(1.7, ht, 10), glossy('#ff8a3d'));
+        bump.position.set(x, y + ht / 2 - 0.8, 0);
+        head.add(bump);
+      }
+      const headObjects = [head];
+      head.traverse(c => { (c as THREE.Mesh).castShadow = true; });
+
+      // back plates (stegosaurus style), alternating sides, biggest in the middle
+      const plateShape = new THREE.Shape();
+      plateShape.moveTo(-4, 0); plateShape.quadraticCurveTo(-3.5, 6, 0, 9); plateShape.quadraticCurveTo(3.5, 6, 4, 0); plateShape.closePath();
+      const plateGeo = extruded(plateShape, 1.0, 0.45);
+      const plateMat = glossy('#ff8a3d', { sheen: 0.6, sheenColor: new THREE.Color('#ffd08a') });
+      const n = 11;
       for (let i = 0; i < n; i++) {
         const f = i / (n - 1);
-        const x = L * (0.3 + 0.62 * f);
-        const ht = 5 + 8 * Math.sin(Math.PI * (0.15 + 0.85 * f));
-        const plate = new THREE.Mesh(new THREE.ConeGeometry(3.8, ht, 4), plateMat);
-        plate.scale.set(1, 1, 0.45);
-        const p = surface(h, x, 0, 0.5);
-        plate.position.set(x, p.y + ht / 2 - 0.3, 0);
-        plate.rotation.y = Math.PI / 4;
+        const x = L * (0.22 + 0.72 * f);
+        const sc = 0.55 + 0.75 * Math.sin(Math.PI * (0.1 + 0.85 * f));
+        const plate = new THREE.Mesh(plateGeo, plateMat);
+        const p = surface(h, x, 0, 0.6);
+        plate.scale.setScalar(sc);
+        plate.position.set(x, p.y - 0.4, (i % 2 ? 1 : -1) * 0.9);
+        plate.rotation.x = (i % 2 ? 1 : -1) * 0.12;
         add(plate);
       }
-      // curling tail tip
-      const tail = new THREE.Mesh(new THREE.ConeGeometry(5.4, 22, 20), plateMat);
-      tail.rotation.z = -Math.PI / 2 + 0.45;
-      tail.position.set(L + 8, 4, 0);
-      add(tail);
-      return { objects };
+      // curling tapered tail with spikes
+      const tailPts = [new THREE.Vector3(L - 8, 0, 0), new THREE.Vector3(L + 6, 1, 0), new THREE.Vector3(L + 18, 5, 0), new THREE.Vector3(L + 27, 12, 0), new THREE.Vector3(L + 30, 19, 0)];
+      const tailCurve = new THREE.CatmullRomCurve3(tailPts);
+      const tailGeo = new THREE.TubeGeometry(tailCurve, 60, 1, 18, false);
+      const tp = tailGeo.getAttribute('position');
+      const P = new THREE.Vector3(), V = new THREE.Vector3();
+      for (let i = 0; i < tp.count; i++) {
+        const ring = Math.floor(i / 19);
+        const f = ring / 60;
+        tailCurve.getPointAt(f, P);
+        V.fromBufferAttribute(tp, i).sub(P);
+        const r = Math.max(0.35, h.radius(L - 8) * 0.95 * Math.pow(1 - f, 0.85));
+        V.multiplyScalar(r);
+        V.y *= h.ySquash + (1 - h.ySquash) * f;
+        tp.setXYZ(i, P.x + V.x, P.y + V.y, P.z + V.z);
+      }
+      tailGeo.computeVertexNormals();
+      add(new THREE.Mesh(tailGeo, skin));
+      const tip = new THREE.Mesh(new THREE.SphereGeometry(0.5, 10, 8), skin);
+      tip.position.copy(tailCurve.getPointAt(1));
+      add(tip);
+      for (const [f, side] of [[0.62, 1], [0.62, -1], [0.8, 1], [0.8, -1]] as const) {
+        const spike = new THREE.Mesh(new THREE.ConeGeometry(1.1, 6, 10), glossy('#f5e6c8'));
+        const at = tailCurve.getPointAt(f);
+        spike.position.copy(at).add(new THREE.Vector3(0, 1.2, side * 2.2));
+        spike.rotation.x = side * 1.0;
+        add(spike);
+      }
+      return { objects, headObjects, pattern: { pattern: 'dinoSkin', colors: ['#4caf50', '#2e7d32', '#c5e1a5'] } };
     }
 
     case 'shark': {
@@ -210,16 +300,18 @@ export function buildShape(shape: ShapeId, h: HandleInfo): ShapeParts {
     }
 
     case 'wand': {
+      // big glittering star standing on the back of the brush head, ribbon around the handle, little gem on the end
       const sm = gold();
-      const st = new THREE.Mesh(extruded(star(13, 5.6), 3, 1), sm);
-      st.position.set(L + 12, 0, 0);
-      st.rotation.y = Math.PI / 2;
-      add(st);
-      // spiral ribbon around the handle
+      const st = new THREE.Mesh(extruded(star(14, 6), 3, 1), sm);
+      const starHolder = new THREE.Group();
+      starHolder.position.set(0, 12.2 + 11.4, 0);
+      starHolder.add(st);
+      const stem = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.6, 3, 16), sm);
+      stem.position.set(0, 13, 0);
       const pts: THREE.Vector3[] = [];
-      const x0 = L * 0.28, x1 = L * 0.96, turns = 3.5;
-      for (let i = 0; i <= 160; i++) {
-        const f = i / 160;
+      const x0 = L * 0.12, x1 = L * 0.96, turns = 4.5;
+      for (let i = 0; i <= 180; i++) {
+        const f = i / 180;
         const x = x0 + (x1 - x0) * f;
         const th = f * turns * Math.PI * 2;
         const r = h.radius(x) + 0.5;
@@ -227,64 +319,13 @@ export function buildShape(shape: ShapeId, h: HandleInfo): ShapeParts {
       }
       const ribbonMat = glossy('#ff5fb0', { emissive: '#ff5fb0', emissiveIntensity: 0.15 });
       addGlitter(ribbonMat, 0.7, 2);
-      const ribbon = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 220, 1.1, 8), ribbonMat);
-      add(ribbon);
-      return { objects, update: (t) => { st.rotation.x = Math.sin(t * 1.5) * 0.4; } };
-    }
-
-    case 'unicorn': {
-      const prof: THREE.Vector2[] = [];
-      for (let i = 0; i <= 30; i++) { const f = i / 30; prof.push(new THREE.Vector2(Math.max(0.05, 6.2 * (1 - f) ** 0.9), f * 32)); }
-      const horn = new THREE.LatheGeometry(prof, 40);
-      const pos = horn.getAttribute('position');
-      for (let i = 0; i < pos.count; i++) {
-        const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
-        const a = Math.atan2(z, x);
-        const k = 1 - 0.13 * (0.5 + 0.5 * Math.sin(a * 2 - y * 1.3));
-        pos.setXYZ(i, x * k, y, z * k);
-      }
-      horn.computeVertexNormals();
-      const hornMat = new THREE.MeshPhysicalMaterial({ color: '#fff4d6', roughness: 0.2, clearcoat: 1, iridescence: 1, iridescenceIOR: 1.6, metalness: 0.2 });
-      addGlitter(hornMat, 0.6, 2);
-      const hm = new THREE.Mesh(horn, hornMat);
-      hm.rotation.z = -Math.PI / 2;
-      hm.position.set(L - 2, 0, 0);
-      add(hm);
-      const mane = ['#ff8cc6', '#b57bff', '#57b6ff', '#6ee7b7', '#ffe066'];
-      mane.forEach((c, i) => {
-        const x = L * (0.68 + i * 0.065);
-        const tuft = new THREE.Mesh(new THREE.SphereGeometry(3.6, 16, 12), glossy(c, { roughness: 0.5, sheen: 1, sheenColor: new THREE.Color(c) }));
-        const p = surface(h, x, 0, 0.6);
-        tuft.scale.set(1.6, 0.8, 0.9);
-        tuft.rotation.z = 0.5;
-        tuft.position.set(x, p.y + 1.8, 0);
-        add(tuft);
-      });
-      return { objects };
-    }
-
-    case 'blocky': {
-      // chunky stepped square handle (pixel style)
-      const parts: THREE.BufferGeometry[] = [];
-      const step = 7.5;
-      for (let x = 0; x < L; x += step) {
-        const r = h.radius(x + step / 2);
-        const w = Math.max(3, Math.round((r * 2) / 1.5) * 1.5 + 1);
-        const ht = Math.max(3, Math.round((r * 2 * h.ySquash) / 1.5) * 1.5 + 1);
-        const b = new THREE.BoxGeometry(step, ht, w);
-        b.translate(x + step / 2, 0, 0);
-        parts.push(b);
-      }
-      const geo = mergeGeometries(parts)!;
-      geo.computeVertexNormals();
-      // a pixel gem on the end
-      const gemMat = glossy('#36e2d4', { emissive: '#0f8f86', emissiveIntensity: 0.5, roughness: 0.3 });
-      addGlitter(gemMat, 0.7, 1.5);
-      const gem = new THREE.Mesh(new THREE.BoxGeometry(7, 7, 7), gemMat);
-      gem.position.set(L + 4, 0, 0);
-      gem.rotation.x = Math.PI / 4;
-      add(gem);
-      return { objects, handleGeometry: geo, update: (t) => { gem.rotation.x = Math.PI / 4 + t * 0.6; } };
+      add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 240, 1.1, 8), ribbonMat));
+      const endGem = new THREE.Mesh(new THREE.SphereGeometry(4.2, 24, 18), sm);
+      endGem.position.set(L + 2, 0, 0);
+      add(endGem);
+      const headObjects = [starHolder, stem];
+      for (const o of headObjects) o.traverse(c => { (c as THREE.Mesh).castShadow = true; });
+      return { objects, headObjects, update: (t) => { st.rotation.y = Math.sin(t * 1.2) * 0.5; st.rotation.z = Math.sin(t * 0.8) * 0.08; } };
     }
   }
 }

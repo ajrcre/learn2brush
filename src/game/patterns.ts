@@ -8,11 +8,11 @@ import { NOISE_GLSL } from './materials';
  */
 export type PatternId =
   | 'solid' | 'gradient' | 'rainbow' | 'flames' | 'tiger' | 'zebra' | 'leopard' | 'dalmatian'
-  | 'pixelGrass' | 'pixelGem' | 'pixelLava' | 'galaxy' | 'glitter';
+  | 'pixelGrass' | 'pixelGem' | 'pixelLava' | 'galaxy' | 'glitter' | 'dinoSkin';
 
 const PATTERN_INDEX: Record<PatternId, number> = {
   solid: 0, gradient: 1, rainbow: 2, flames: 3, tiger: 4, zebra: 5, leopard: 6, dalmatian: 7,
-  pixelGrass: 8, pixelGem: 9, pixelLava: 10, galaxy: 11, glitter: 12,
+  pixelGrass: 8, pixelGem: 9, pixelLava: 10, galaxy: 11, glitter: 12, dinoSkin: 13,
 };
 
 export interface PatternOptions {
@@ -204,6 +204,15 @@ vec3 l2b_ramp(float t){
     col = mix(uC0, uC1, n);
     l2b_metal = 0.75; l2b_rough = 0.3;
   }
+  else if (uPattern == 13) {
+    // dinosaur skin: green scales with darker patches and a lighter belly
+    float sc = l2b_worley(p * 0.55);
+    float blotch = smoothstep(0.55, 0.7, l2b_fbm(p * 0.12 + 5.0));
+    col = mix(uC0, uC1, blotch * 0.8);
+    col = mix(col, uC2, smoothstep(-0.25, -0.75, topness) * 0.85);
+    col *= 0.78 + 0.22 * smoothstep(0.05, 0.4, sc);   // darker grooves between scales
+    l2b_rough = 0.5;
+  }
   // sword: polished blade near the head
   if (uBladeEnd > 0.0 && p.x < uBladeEnd) {
     float fuller = smoothstep(0.35, 0.1, abs(p.z) / 4.0);
@@ -253,4 +262,16 @@ totalEmissiveRadiance += l2b_glitter(vGlitPos * ${scale.toFixed(2)}, normal, nor
     shader.uniforms.uTime_g = u.uTime;
   };
   return u;
+}
+
+/** Switch an existing pattern material to another pattern / colours (used when a shape brings its own skin). */
+export function setPattern(m: THREE.Material, pattern: PatternId, colors: string[]) {
+  const u = m.userData.uniforms as PatternUniforms | undefined;
+  if (!u) return;
+  u.uPattern.value = PATTERN_INDEX[pattern];
+  const cols = colors.map(c => new THREE.Color(c));
+  while (cols.length < 4) cols.push(cols[cols.length - 1].clone());
+  u.uC0.value.copy(cols[0]); u.uC1.value.copy(cols[1]); u.uC2.value.copy(cols[2]); u.uC3.value.copy(cols[3]);
+  u.uNColors.value = Math.min(4, colors.length);
+  u.uGlitter.value = 0;
 }

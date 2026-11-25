@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { rng } from './jaws/toothGeometry';
-import { createPatternMaterial, addGlitter, type PatternId } from './patterns';
+import { createPatternMaterial, addGlitter, setPattern, type PatternId } from './patterns';
 import { buildShape, type ShapeId } from './brushShapes';
 
 export type BrushType = 'manual' | 'electric';
@@ -108,19 +108,17 @@ export class Brush {
     const info = { length, radius: radiusFn(profile), ySquash, material: mat, accent: L.accent };
     const parts = buildShape(shape, info);
     mat.userData.uniforms.uBladeEnd.value = parts.bladeEnd ?? 0;
-    let geo = parts.handleGeometry;
-    if (!geo) {
-      const lathe = new THREE.LatheGeometry(profile.map(([x, r]) => new THREE.Vector2(r, x)), segments);
-      lathe.rotateZ(-Math.PI / 2); // lathe axis Y → X
-      lathe.scale(1, ySquash, 1);
-      geo = lathe;
-    }
+    if (parts.pattern) setPattern(mat, parts.pattern.pattern, parts.pattern.colors);
+    const geo = new THREE.LatheGeometry(profile.map(([x, r]) => new THREE.Vector2(r, x)), segments);
+    geo.rotateZ(-Math.PI / 2); // lathe axis Y → X
+    geo.scale(1, ySquash, 1);
     const handle = new THREE.Mesh(geo, mat);
     handle.position.copy(at);
     handle.rotation.z = tilt;
     this.handleMat = mat;
     for (const o of parts.objects) handle.add(o);
     this.add(this.group, handle);
+    for (const o of parts.headObjects ?? []) this.add(this.head, o);
     this.shapeUpdate = parts.update;
     return { handle, shape };
   }
@@ -129,7 +127,7 @@ export class Brush {
     this.clear();
     const L = this.look;
     const headTop = this.bristleLen; // bristle base plane
-    const headColor = L.head ?? L.handle[0];
+    const headColor = L.shape === 'dino' ? '#2e7d32' : (L.head ?? L.handle[0]);
     if (L.type === 'manual') {
       const head = new THREE.Mesh(new RoundedBoxGeometry(21, 3.2, 9.5, 4, 1.4), this.plastic(headColor));
       head.position.set(0, headTop + 1.6, 0);
@@ -155,7 +153,7 @@ export class Brush {
       disc.position.set(0, headTop + 1.5, 0);
       this.add(this.head, disc);
       const { handle, shape } = this.buildHandle(ELECTRIC_PROFILE, 36, 0.92, new THREE.Vector3(4, headTop + 2.6, 0), 0.06);
-      if (shape === 'classic' || shape === 'dino' || shape === 'unicorn' || shape === 'wand') {
+      if (shape === 'classic' || shape === 'dino' || shape === 'wand') {
         const btn = new THREE.Mesh(new THREE.CylinderGeometry(3.6, 3.6, 1.6, 28), new THREE.MeshPhysicalMaterial({ color: L.accent, roughness: 0.6 }));
         btn.position.set(75, 10.4, 0);
         handle.add(btn);

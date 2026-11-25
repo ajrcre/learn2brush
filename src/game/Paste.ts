@@ -8,8 +8,6 @@ export interface PasteLook {
   glitter?: number;
   /** glow-in-the-dark strength */
   glow?: number;
-  /** 'ribbon' (default) or 'cubes' (pixel paste) */
-  style?: 'ribbon' | 'cubes';
   /** 'legacy' = the original striped paste (base + 2 thin stripes); 'even' = equal spiral stripes */
   stripes?: 'legacy' | 'even';
 }
@@ -18,9 +16,7 @@ export interface PasteLook {
 export class Paste {
   readonly mesh: THREE.Mesh;
   readonly material: THREE.MeshPhysicalMaterial;
-  private cubes: THREE.InstancedMesh;
   private glit: { uTime: { value: number }; uGlitter: { value: number }; uSelfGlow: { value: number } };
-  private cubeGlit: { uTime: { value: number }; uGlitter: { value: number }; uSelfGlow: { value: number } };
   look: PasteLook;
   amount = 0;
   /** how much paste remains during brushing (1 → 0) */
@@ -41,19 +37,13 @@ export class Paste {
     this.glit = addGlitter(this.material, 0, 1.5);
     this.mesh = new THREE.Mesh(new THREE.BufferGeometry(), this.material);
     this.mesh.castShadow = true;
-    const cubeMat = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.45, clearcoat: 0.3 });
-    this.cubeGlit = addGlitter(cubeMat, 0, 1.5, true);
-    this.cubes = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), cubeMat, 400);
-    this.cubes.count = 0;
-    this.cubes.castShadow = true;
-    this.mesh.add(this.cubes);
     this.setLook(look);
   }
 
   setLook(look: PasteLook) {
     this.look = look;
-    this.glit.uGlitter.value = this.cubeGlit.uGlitter.value = look.glitter ?? 0;
-    this.glit.uSelfGlow.value = this.cubeGlit.uSelfGlow.value = look.glow ?? 0;
+    this.glit.uGlitter.value = look.glitter ?? 0;
+    this.glit.uSelfGlow.value = look.glow ?? 0;
     this.builtFor = -1;
     this.rebuild();
   }
@@ -92,35 +82,6 @@ export class Paste {
     const curve = new THREE.CatmullRomCurve3(pts);
     const cols = this.look.colors.map(c => new THREE.Color(c));
 
-    if (this.look.style === 'cubes') {
-      // pixel paste: a ribbon built from little cubes
-      this.material.visible = false;
-      const m4 = new THREE.Matrix4();
-      const q = new THREE.Quaternion();
-      const P = new THREE.Vector3();
-      let k = 0;
-      const steps = Math.max(2, Math.round(len / 1.4));
-      for (let i = 0; i <= steps && k < 395; i++) {
-        const f = i / steps;
-        curve.getPointAt(f, P);
-        const taper = Math.min(1, Math.min(f, 1 - f) / 0.15 + 0.35);
-        const rings: [number, number][] = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]];
-        for (const [dy, dz] of rings) {
-          if (k >= 395) break;
-          const sz = 1.45 * taper;
-          m4.compose(new THREE.Vector3(P.x, P.y + dy * 1.35 * taper, P.z + dz * 1.35 * taper), q, new THREE.Vector3(sz, sz, sz));
-          this.cubes.setMatrixAt(k, m4);
-          this.cubes.setColorAt(k, cols[(i + Math.abs(dy) * 2 + Math.abs(dz)) % cols.length]);
-          k++;
-        }
-      }
-      this.cubes.count = k;
-      this.cubes.instanceMatrix.needsUpdate = true;
-      if (this.cubes.instanceColor) this.cubes.instanceColor.needsUpdate = true;
-      return;
-    }
-    this.material.visible = true;
-    this.cubes.count = 0;
     const tube = new THREE.TubeGeometry(curve, 64, radius, 20, false);
     // swirl ridges + rounded end caps by tapering the radius near the ends
     const pos = tube.getAttribute('position');
@@ -161,7 +122,6 @@ export class Paste {
 
   update(dt: number) {
     this.glit.uTime.value += dt;
-    this.cubeGlit.uTime.value += dt;
   }
 }
 

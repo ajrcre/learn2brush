@@ -155,13 +155,7 @@ export function makeGradientBackground(top = '#cfeff0', bottom = '#9fd3ea') {
   return t;
 }
 
-/**
- * Tone mapping: Neutral keeps toy colours vivid; AgX (the current live default) washes saturated
- * colours out. Neutral is in review: used with ?review, or forced with ?tm=neutral|agx.
- */
+/** Tone mapping: Neutral keeps toy colours vivid (approved); ?tm=agx shows the old softer look. */
 function toneMode(): 'agx' | 'neutral' {
-  const q = new URLSearchParams(location.search);
-  const tm = q.get('tm');
-  if (tm === 'agx' || tm === 'neutral') return tm;
-  return q.has('review') ? 'neutral' : 'agx';
+  return new URLSearchParams(location.search).get('tm') === 'agx' ? 'agx' : 'neutral';
 }
