@@ -1,0 +1,8 @@
+{
+  "name": "jessica",
+  "voiceId": "cgSgspJ2msm6clMCkdW9",
+  "model": "eleven_v3",
+  "settings": { "stability": 0.5, "similarity_boost": 0.8, "style": 0.3 },
+  "hebrewText": "plain",
+  "_note": "Chosen in the pronunciation lab: Hebrew reads best WITHOUT Nikud on eleven_v3. The script keeps Nikud; it is stripped before TTS. Per-line overrides go in src/i18n/voice.json as \"he_tts\"."
+}
