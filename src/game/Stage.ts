@@ -87,7 +87,7 @@ export class Stage {
     }
     const effects = [
       new BloomEffect({ intensity: 0.35, luminanceThreshold: 0.92, luminanceSmoothing: 0.15, mipmapBlur: true }),
-      new ToneMappingEffect({ mode: ToneMappingMode.AGX }),
+      new ToneMappingEffect({ mode: toneMode() === 'agx' ? ToneMappingMode.AGX : ToneMappingMode.NEUTRAL }),
       new VignetteEffect({ darkness: 0.25, offset: 0.35 }),
       new SMAAEffect(),
     ];
@@ -153,4 +153,15 @@ export function makeGradientBackground(top = '#cfeff0', bottom = '#9fd3ea') {
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
+}
+
+/**
+ * Tone mapping: Neutral keeps toy colours vivid; AgX (the current live default) washes saturated
+ * colours out. Neutral is in review: used with ?review, or forced with ?tm=neutral|agx.
+ */
+function toneMode(): 'agx' | 'neutral' {
+  const q = new URLSearchParams(location.search);
+  const tm = q.get('tm');
+  if (tm === 'agx' || tm === 'neutral') return tm;
+  return q.has('review') ? 'neutral' : 'agx';
 }

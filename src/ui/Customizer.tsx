@@ -1,22 +1,48 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Game } from '../game/Game';
 import { useStore } from '../state/store';
-import { CATALOG, type Category, type Item } from '../config/economy';
+import { CATALOG, isVisible, type Category, type Item } from '../config/economy';
 import { useT } from '../i18n/ui';
 import { audio, haptic } from '../audio/audio';
 import { looks } from './looks';
 
-const TABS: { cat: Category; icon: string; key: 'jaw' | 'brushType' | 'handle' | 'bristles' | 'paste' }[] = [
+const TABS: { cat: Category; icon: string; key: 'jaw' | 'brushType' | 'shape' | 'handle' | 'bristles' | 'paste' }[] = [
   { cat: 'handle', icon: '🎨', key: 'handle' },
+  { cat: 'shape', icon: '🗡️', key: 'shape' },
   { cat: 'bristles', icon: '✨', key: 'bristles' },
   { cat: 'paste', icon: '🧴', key: 'paste' },
   { cat: 'brushType', icon: '🪥', key: 'brushType' },
   { cat: 'jaw', icon: '😁', key: 'jaw' },
 ];
 
+/** CSS preview of an item's colours / pattern for the swipe cards. */
+function swatchBackground(it: Item): string {
+  const c = it.colors;
+  const grid = 'repeating-linear-gradient(0deg, rgba(0,0,0,.14) 0 1px, transparent 1px 9px), repeating-linear-gradient(90deg, rgba(0,0,0,.14) 0 1px, transparent 1px 9px)';
+  switch (it.pattern) {
+    case 'flames': return 'radial-gradient(ellipse 60% 75% at 50% 100%, #fff3a0 0 15%, #ffc21a 28%, #ff6a00 45%, #b31200 62%, #2a0a05 80%)';
+    case 'tiger': return 'repeating-linear-gradient(115deg, #f28c28 0 8px, #1b1b1b 8px 12px)';
+    case 'zebra': return 'repeating-linear-gradient(100deg, #fff 0 7px, #111 7px 12px)';
+    case 'leopard': return 'radial-gradient(circle, #b8792a 0 3px, #2e1a0b 4px 6px, transparent 7px) 0 0/17px 17px, radial-gradient(circle, #b8792a 0 2px, #2e1a0b 3px 5px, transparent 6px) 8px 9px/17px 17px, #e6b450';
+    case 'dalmatian': return 'radial-gradient(circle, #111 0 4px, transparent 5px) 0 0/18px 18px, radial-gradient(circle, #111 0 3px, transparent 4px) 9px 10px/18px 18px, #fafafa';
+    case 'pixelGrass': return `${grid}, linear-gradient(#6fb846 0 22%, #4e8a30 22% 36%, #7a5230 36% 70%, #5f3f24 70%)`;
+    case 'pixelGem': return `${grid}, conic-gradient(#36e2d4 0 25%, #1d2b3a 0 50%, #a9fff6 0 75%, #24384a 0) 0 0/18px 18px`;
+    case 'pixelLava': return `${grid}, conic-gradient(#ff6a00 0 25%, #8c1a05 0 50%, #ffd54a 0 75%, #ff3d00 0) 0 0/18px 18px`;
+    case 'galaxy': return 'radial-gradient(circle at 30% 30%, #fff 0 1.5px, transparent 2.5px) 0 0/13px 13px, radial-gradient(circle at 70% 60%, #e04fd6 0 20%, transparent 55%), linear-gradient(135deg, #0b0a2e, #4b1d8f)';
+    case 'glitter': return `radial-gradient(circle, #fff 0 1.5px, transparent 2.5px) 0 0/8px 8px, radial-gradient(circle, rgba(255,255,255,.7) 0 1px, transparent 2px) 4px 4px/8px 8px, linear-gradient(135deg, ${c[0]}, ${c[1] ?? c[0]})`;
+  }
+  if (it.cat === 'paste' && it.pasteStyle === 'cubes') return `${grid}, conic-gradient(${c[0]} 0 25%, ${c[1]} 0 50%, ${c[2]} 0 75%, ${c[3]} 0) 0 0/18px 18px`;
+  if (it.cat === 'paste' && it.stripes === 'even' && c.length > 1) {
+    const w = 7;
+    return `repeating-linear-gradient(45deg, ${c.map((col, i) => `${col} ${i * w}px ${(i + 1) * w}px`).join(', ')})`;
+  }
+  return c.length > 1 ? `linear-gradient(135deg, ${c.join(',')})` : c[0];
+}
+
 export function Swatch({ it, size = 'md' }: { it: Item; size?: 'md' | 'lg' }) {
-  const bg = it.colors.length > 1 ? `linear-gradient(135deg, ${it.colors.join(',')})` : it.colors[0];
-  return <span className={`swatch ${size} ${it.sparkle ? 'sparkle' : ''}`} style={{ background: bg }} />;
+  const square = it.pattern?.startsWith('pixel') || it.pasteStyle === 'cubes';
+  const sparkly = it.sparkle || (it.glitter ?? 0) > 0;
+  return <span className={`swatch ${size} ${sparkly ? 'sparkle' : ''} ${square ? 'square' : ''} ${it.glow ? 'glow' : ''}`} style={{ background: swatchBackground(it), ['--glow' as string]: it.colors[0] }} />;
 }
 
 /**
@@ -27,7 +53,8 @@ export function Customizer({ game, mode, top }: { game: Game; mode: 'choose' | '
   const t = useT();
   const { lang, profile, owns, equip, buy, go, debugUnlockAll, setDebug } = useStore();
   const [tab, setTab] = useState<Category>(mode === 'shop' ? 'jaw' : 'handle');
-  const items = useMemo(() => CATALOG.filter(i => i.cat === tab), [tab]);
+  const items = useMemo(() => CATALOG.filter(i => i.cat === tab && isVisible(i)), [tab]);
+  const tabs = useMemo(() => TABS.filter(tb => CATALOG.filter(i => i.cat === tb.cat && isVisible(i)).length > 1), []);
   const equippedIndex = Math.max(0, items.findIndex(i => i.id === profile.equipped[tab]));
   const [index, setIndex] = useState(equippedIndex);
   const [burst, setBurst] = useState(false);
@@ -127,7 +154,7 @@ export function Customizer({ game, mode, top }: { game: Game; mode: 'choose' | '
     <div className="overlay custom">
       {top}
       <div className="cats" role="tablist">
-        {TABS.map(tb => (
+        {tabs.map(tb => (
           <button key={tb.cat} role="tab" aria-selected={tab === tb.cat} className={tab === tb.cat ? 'on' : ''} onClick={() => { void audio.sfx('tap'); setTab(tb.cat); }}>
             <span className="icon">{tb.icon}</span><span className="lbl">{t(tb.key)}</span>
           </button>
@@ -156,7 +183,7 @@ export function Customizer({ game, mode, top }: { game: Game; mode: 'choose' | '
             const o = owns(it.id);
             return (
               <button key={it.id} className={`slide ${i === index ? 'center' : ''} ${o && !it.comingSoon ? 'own' : 'locked'}`} onClick={() => scrollToIndex(i)}>
-                <span className="art">{it.emoji && (it.cat === 'jaw' || it.cat === 'brushType') ? <span className="emoji">{it.emoji}</span> : <Swatch it={it} size="lg" />}</span>
+                <span className="art">{it.emoji && (it.cat === 'jaw' || it.cat === 'brushType' || it.cat === 'shape') ? <span className="emoji">{it.emoji}</span> : <Swatch it={it} size="lg" />}</span>
                 <span className="name">{it.name[lang]}</span>
                 {!o && <span className="lock-badge">🔒</span>}
               </button>

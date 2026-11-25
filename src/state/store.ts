@@ -60,7 +60,8 @@ export const useStore = create<State>((set, get) => ({
   debugUnlockAll: new URLSearchParams(location.search).has('unlockall'),
   setLang: (lang) => { set({ lang }); try { localStorage.setItem('l2b-lang', lang); } catch { /* ignore */ } },
   go: (screen) => set({ screen }),
-  owns: (id) => get().debugUnlockAll || get().profile.owned.includes(id),
+  // free items (including ones added after a profile was created) are always owned
+  owns: (id) => get().debugUnlockAll || get().profile.owned.includes(id) || item(id)?.price === 0,
   equip: (cat, id) => {
     if (!get().owns(id)) return;
     const profile = { ...get().profile, equipped: { ...get().profile.equipped, [cat]: id } };

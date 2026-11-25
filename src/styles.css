@@ -194,8 +194,10 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: 0; }
 .sparkle-meter .track > div { height: 100%; background: linear-gradient(90deg, #8fe9c4, #22c07a); border-radius: 99px; transition: width 0.4s ease; }
 [dir='rtl'] .sparkle-meter .track > div { margin-inline-start: auto; background: linear-gradient(270deg, #8fe9c4, #22c07a); }
 @media (max-width: 520px) {
-  .custom .cats button { width: 62px; }
-  .custom .cats button .icon { font-size: 28px; }
+  .custom .cats { gap: 5px; flex-wrap: nowrap; padding-inline: 8px; }
+  .custom .cats button { width: 56px; padding: 6px 2px 5px; border-radius: 18px; }
+  .custom .cats button .icon { font-size: 26px; }
+  .custom .cats button .lbl { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
   .slide { flex-basis: 130px; height: 130px; }
   .carousel { padding-inline: calc(50% - 65px); }
   .swatch.lg { width: 70px; height: 70px; }
@@ -227,3 +229,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: 0; }
   20% { transform: translate(-50%, -90%) scale(1.25); opacity: 1; }
   100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.5); opacity: 0.2; }
 }
+.swatch.square { border-radius: 14%; }
+.swatch.glow { box-shadow: 0 0 14px 4px var(--glow), inset 0 -6px 10px rgba(0,0,0,0.1); }
+.swatch.sparkle::after { animation: twinkle 1.6s ease-in-out infinite; }
+@keyframes twinkle { 50% { transform: scale(1.25) rotate(15deg); opacity: 0.6; } }

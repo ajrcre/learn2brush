@@ -10,6 +10,7 @@ const UI = {
   choose: { en: 'Pick your brush', he: 'בּוֹחֲרִים מִבְרֶשֶׁת' },
   brushType: { en: 'Brush', he: 'מִבְרֶשֶׁת' },
   handle: { en: 'Handle', he: 'יָדִית' },
+  shape: { en: 'Shape', he: 'צוּרָה' },
   bristles: { en: 'Bristles', he: 'זִיפִים' },
   paste: { en: 'Toothpaste', he: 'מִשְׁחָה' },
   jaw: { en: 'Teeth', he: 'שִׁנַּיִם' },

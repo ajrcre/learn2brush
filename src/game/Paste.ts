@@ -1,20 +1,30 @@
 import * as THREE from 'three';
-import { NOISE_GLSL } from './materials';
+import { addGlitter } from './patterns';
 
 export interface PasteLook {
-  colors: string[]; // 1 = solid, 3 = striped (base + 2 stripes)
+  colors: string[]; // 1 = solid; more = stripes
+  /** legacy flag (pre-glitter sparkle); real sparkle uses `glitter` */
   sparkle?: boolean;
+  glitter?: number;
+  /** glow-in-the-dark strength */
+  glow?: number;
+  /** 'ribbon' (default) or 'cubes' (pixel paste) */
+  style?: 'ribbon' | 'cubes';
+  /** 'legacy' = the original striped paste (base + 2 thin stripes); 'even' = equal spiral stripes */
+  stripes?: 'legacy' | 'even';
 }
 
 /** Toothpaste ribbon sitting on the bristle tips. Grows with `amount` (0..1.3, 0.35–0.65 ≈ pea-size). */
 export class Paste {
   readonly mesh: THREE.Mesh;
   readonly material: THREE.MeshPhysicalMaterial;
+  private cubes: THREE.InstancedMesh;
+  private glit: { uTime: { value: number }; uGlitter: { value: number }; uSelfGlow: { value: number } };
+  private cubeGlit: { uTime: { value: number }; uGlitter: { value: number }; uSelfGlow: { value: number } };
   look: PasteLook;
   amount = 0;
   /** how much paste remains during brushing (1 → 0) */
   remaining = 1;
-  private uniforms = { uTime: { value: 0 }, uSparkle: { value: 0 } };
   private builtFor = -1;
 
   constructor(look: PasteLook) {
@@ -28,28 +38,22 @@ export class Paste {
       sheen: 0.5,
       sheenColor: new THREE.Color(0xffffff),
     });
-    this.material.customProgramCacheKey = () => 'l2b-paste';
-    this.material.onBeforeCompile = (shader) => {
-      Object.assign(shader.uniforms, this.uniforms);
-      shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', '#include <common>\nvarying vec3 vObjPos;')
-        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvObjPos = position;');
-      shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', `#include <common>\nuniform float uTime; uniform float uSparkle; varying vec3 vObjPos;\n${NOISE_GLSL}`)
-        .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-if (uSparkle > 0.5) {
-  float g = l2b_noise(vObjPos * 6.0 + vec3(0.0, uTime * 0.6, 0.0));
-  totalEmissiveRadiance += vec3(1.0, 0.95, 0.8) * smoothstep(0.86, 0.95, g) * 2.5;
-}`);
-    };
+    this.glit = addGlitter(this.material, 0, 1.5);
     this.mesh = new THREE.Mesh(new THREE.BufferGeometry(), this.material);
     this.mesh.castShadow = true;
+    const cubeMat = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.45, clearcoat: 0.3 });
+    this.cubeGlit = addGlitter(cubeMat, 0, 1.5, true);
+    this.cubes = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), cubeMat, 400);
+    this.cubes.count = 0;
+    this.cubes.castShadow = true;
+    this.mesh.add(this.cubes);
     this.setLook(look);
   }
 
   setLook(look: PasteLook) {
     this.look = look;
-    this.uniforms.uSparkle.value = look.sparkle ? 1 : 0;
+    this.glit.uGlitter.value = this.cubeGlit.uGlitter.value = look.glitter ?? 0;
+    this.glit.uSelfGlow.value = this.cubeGlit.uSelfGlow.value = look.glow ?? 0;
     this.builtFor = -1;
     this.rebuild();
   }
@@ -57,6 +61,16 @@ if (uSparkle > 0.5) {
   setAmount(a: number) {
     this.amount = a;
     this.rebuild();
+  }
+
+  private stripeColor(cols: THREE.Color[], twist: number) {
+    if (cols.length === 1) return cols[0];
+    if (this.look.stripes === 'legacy' && cols.length >= 3) {
+      const stripe = Math.sin(twist * 3);
+      return stripe > 0.55 ? cols[1] : stripe < -0.55 ? cols[2] : cols[0];
+    }
+    const t = ((twist / (Math.PI * 2)) % 1 + 1) % 1;
+    return cols[Math.floor(t * cols.length) % cols.length];
   }
 
   private rebuild() {
@@ -76,13 +90,43 @@ if (uSparkle > 0.5) {
       pts.push(new THREE.Vector3(x, -radius * 0.75 - Math.sin(f * Math.PI) * 0.4, Math.sin(f * Math.PI * 3) * 1.1 * Math.min(1, visible * 2)));
     }
     const curve = new THREE.CatmullRomCurve3(pts);
+    const cols = this.look.colors.map(c => new THREE.Color(c));
+
+    if (this.look.style === 'cubes') {
+      // pixel paste: a ribbon built from little cubes
+      this.material.visible = false;
+      const m4 = new THREE.Matrix4();
+      const q = new THREE.Quaternion();
+      const P = new THREE.Vector3();
+      let k = 0;
+      const steps = Math.max(2, Math.round(len / 1.4));
+      for (let i = 0; i <= steps && k < 395; i++) {
+        const f = i / steps;
+        curve.getPointAt(f, P);
+        const taper = Math.min(1, Math.min(f, 1 - f) / 0.15 + 0.35);
+        const rings: [number, number][] = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]];
+        for (const [dy, dz] of rings) {
+          if (k >= 395) break;
+          const sz = 1.45 * taper;
+          m4.compose(new THREE.Vector3(P.x, P.y + dy * 1.35 * taper, P.z + dz * 1.35 * taper), q, new THREE.Vector3(sz, sz, sz));
+          this.cubes.setMatrixAt(k, m4);
+          this.cubes.setColorAt(k, cols[(i + Math.abs(dy) * 2 + Math.abs(dz)) % cols.length]);
+          k++;
+        }
+      }
+      this.cubes.count = k;
+      this.cubes.instanceMatrix.needsUpdate = true;
+      if (this.cubes.instanceColor) this.cubes.instanceColor.needsUpdate = true;
+      return;
+    }
+    this.material.visible = true;
+    this.cubes.count = 0;
     const tube = new THREE.TubeGeometry(curve, 64, radius, 20, false);
     // swirl ridges + rounded end caps by tapering the radius near the ends
     const pos = tube.getAttribute('position');
     const tmp = new THREE.Vector3();
     const P = new THREE.Vector3();
     const colors = new Float32Array(pos.count * 3);
-    const cols = this.look.colors.map(c => new THREE.Color(c));
     const ringVerts = 21;
     for (let i = 0; i < pos.count; i++) {
       const seg = Math.floor(i / ringVerts);
@@ -98,12 +142,7 @@ if (uSparkle > 0.5) {
       const tipNarrow = f > 0.85 ? 1 - (f - 0.85) * 2.2 : 1;
       tmp.multiplyScalar(ridge * cap * tipNarrow);
       pos.setXYZ(i, P.x + tmp.x, P.y + tmp.y, P.z + tmp.z);
-      let c = cols[0];
-      if (cols.length >= 3) {
-        const stripe = Math.sin(twist * 3);
-        if (stripe > 0.55) c = cols[1];
-        else if (stripe < -0.55) c = cols[2];
-      }
+      const c = this.stripeColor(cols, twist);
       colors.set([c.r, c.g, c.b], i * 3);
     }
     tube.setAttribute('color', new THREE.BufferAttribute(colors, 3));
@@ -121,7 +160,8 @@ if (uSparkle > 0.5) {
   }
 
   update(dt: number) {
-    this.uniforms.uTime.value += dt;
+    this.glit.uTime.value += dt;
+    this.cubeGlit.uTime.value += dt;
   }
 }
 

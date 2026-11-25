@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Game } from './game/Game';
 import { useStore } from './state/store';
-import { nextGoal, REWARDS, type Item } from './config/economy';
+import { CATALOG, nextGoal, REWARDS, type Item } from './config/economy';
 import { useT } from './i18n/ui';
 import { audio, haptic } from './audio/audio';
 import { Customizer, Swatch } from './ui/Customizer';
@@ -35,6 +35,8 @@ export default function App() {
     gameSingleton = new Game(canvasRef.current, l.brush, l.paste);
     gameSingleton.start();
     (window as unknown as { __game: Game }).__game = gameSingleton;
+    // hooks for the automated render / review scripts
+    Object.assign(window, { __looks: looks, __store: useStore, __catalog: CATALOG });
     setGame(gameSingleton);
     requestAnimationFrame(() => requestAnimationFrame(() => { (window as unknown as { __ready: boolean }).__ready = true; }));
   }, []);

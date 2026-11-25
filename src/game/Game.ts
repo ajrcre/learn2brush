@@ -158,7 +158,9 @@ export class Game {
   }
 
   /** In the customiser, show a blob of paste on the brush so the colour can be previewed. */
+  private showcasePaste = false;
   setShowcasePaste(on: boolean) {
+    this.showcasePaste = on;
     if (this.phase !== 'customize') return;
     this.paste.remaining = 1;
     this.paste.setAmount(on ? 0.55 : 0);
@@ -301,10 +303,12 @@ export class Game {
     if (this.phase === 'customize') {
       // brush shown in the upper part of the screen, above the selection panel
       // brush sits in the empty band between the category buttons and the carousel
-      const d = this.fitDistance(portrait ? 122 : 200, portrait ? 150 : 125);
+      // frame the whole brush including shape parts on the end (star, flame, horn)
+      const electric = this.brush.look.type === 'electric';
+      const d = this.fitDistance((portrait ? 180 : 215) + (electric ? 45 : 0), portrait ? 150 : 125);
       const visH = 2 * d * tanHalf;
-      const cx = portrait ? 42 : 58;
-      const lift = portrait ? 0.19 : 0.13;
+      const cx = (portrait ? 70 : 68) + (electric ? 22 : 0);
+      const lift = portrait ? 0.07 : 0.1;
       this.camTarget.set(cx, -visH * lift, 0);
       this.camPos.set(cx, -visH * lift + 25, d);
     } else if (this.phase === 'paste') {
@@ -373,7 +377,10 @@ export class Game {
   private updateShowcase(dt: number) {
     const g = this.brush.group;
     // bristles up, gently rocking, viewed at an angle
-    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI + 0.45 + Math.sin(this.elapsed * 0.8) * 0.1, Math.sin(this.elapsed * 0.5) * 0.2, 0.1));
+    // bristles up when choosing toothpaste; otherwise show the back of the handle (where shape parts sit)
+    const q = this.showcasePaste
+      ? new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI + 0.45 + Math.sin(this.elapsed * 0.8) * 0.1, Math.sin(this.elapsed * 0.5) * 0.2, 0.1))
+      : new THREE.Quaternion().setFromEuler(new THREE.Euler(0.55 + Math.sin(this.elapsed * 0.8) * 0.1, Math.sin(this.elapsed * 0.5) * 0.2, -0.1));
     g.quaternion.slerp(q, 1 - Math.exp(-6 * dt));
     g.position.lerp(new THREE.Vector3(0, 0, 0), 1 - Math.exp(-6 * dt));
   }
