@@ -12,7 +12,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icons/*.png', 'icons/icon.svg', 'img/*', 'sfx/*.mp3', 'audio/**/*.mp3'],
+      includeAssets: ['icons/*.png', 'img/*', 'sfx/*.mp3', 'audio/**/*.mp3'],
       manifest: {
         id: '/',
         name: 'Learn2Brush – לומדים לצחצח',

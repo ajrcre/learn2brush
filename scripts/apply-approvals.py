@@ -38,7 +38,7 @@ def cover(im: Image.Image, w: int, h: int) -> Image.Image:
 def main(path: str):
     decisions = json.loads(Path(path).read_text())
     manifest = json.loads(MANIFEST.read_text()) if MANIFEST.exists() else {'items': {}}
-    now = datetime.datetime.utcnow().isoformat() + 'Z'
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
     applied = []
     for d in decisions:
         if d.get('decision') != 'approve':
@@ -68,7 +68,7 @@ def main(path: str):
             im = Image.open(src).convert('RGB')
             trim = round(im.width * 0.075)  # remove drawn rounded corners
             im = im.crop((trim, trim, im.width - trim, im.height - trim)).resize((1024, 1024), Image.LANCZOS)
-            dst = ROOT / 'public' / 'icons' / 'icon-source.png'
+            dst = ROOT / 'assets' / 'icon-source.png'
             im.save(dst)
             subprocess.run(['node', str(ROOT / 'scripts' / 'rasterize-icons.cjs'), str(dst)], check=True)
         elif item == 'voice':

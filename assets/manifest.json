@@ -1,0 +1,140 @@
+{
+  "items": {
+    "img:app_icon": {
+      "status": "approved",
+      "choice": "v1",
+      "source": "review/images/app_icon_v1.jpg",
+      "output": "public/icons/icon-source.png",
+      "note": "",
+      "approvedAt": "2026-11-25T15:00:25.479525Z"
+    },
+    "img:bg_bathroom": {
+      "status": "approved",
+      "choice": "v3",
+      "source": "review/images/bg_bathroom_v3.jpg",
+      "output": "public/img/bg.jpg",
+      "note": "",
+      "approvedAt": "2026-11-25T15:00:25.479525Z"
+    },
+    "img:og_image": {
+      "status": "approved",
+      "choice": "v3",
+      "source": "review/images/og_image_v3.jpg",
+      "output": "public/img/og.jpg",
+      "note": "",
+      "approvedAt": "2026-11-25T15:00:25.479525Z"
+    },
+    "sfx:applause": {
+      "status": "approved",
+      "choice": "v2",
+      "source": "review/sfx/applause_v2.mp3",
+      "output": "public/sfx/applause.mp3",
+      "note": "",
+      "approvedAt": "2026-11-25T15:00:25.479525Z"
+    },
+    "sfx:bubble_pop": {
+      "status": "approved",
+      "choice": "v2",
+      "source": "review/sfx/bubble_pop_v2.mp3",
+      "output": "public/sfx/bubble_pop.mp3",
+      "note": "",
+      "approvedAt": "2026-11-25T15:00:25.479525Z"
+    },
+    "sfx:electric_loop": {
+      "status": "approved",
+      "choice": "v1",
+      "source": "review/sfx/electric_loop_v1.mp3",
+      "output": "public/sfx/electric_loop.mp3",
+      "note": "",
+      "approvedAt": "2026-11-25T15:00:25.479525Z"
+    },
+    "sfx:fanfare": {
+      "status": "approved",
+      "choice": "v1",
+      "source": "review/sfx/fanfare_v1.mp3",
+      "output": "public/sfx/fanfare.mp3",
+      "note": "",
+      "approvedAt": "2026-11-25T15:00:25.479525Z"
+    },
+    "sfx:foam_loop": {
+      "status": "approved",
+      "choice": "v2",
+      "source": "review/sfx/foam_loop_v2.mp3",
+      "output": "public/sfx/foam_loop.mp3",
+      "note": "",
+      "approvedAt": "2026-11-25T15:00:25.479525Z"
+    },
+    "sfx:food_pop": {
+      "status": "approved",
+      "choice": "v1",
+      "source": "review/sfx/food_pop_v1.mp3",
+      "output": "public/sfx/food_pop.mp3",
+      "note": "",
+      "approvedAt": "2026-11-25T15:00:25.479525Z"
+    },
+    "sfx:locked": {
+      "status": "approved",
+      "choice": "v2",
+      "source": "review/sfx/locked_v2.mp3",
+      "output": "public/sfx/locked.mp3",
+      "note": "",
+      "approvedAt": "2026-11-25T15:00:25.479525Z"
+    },
+    "sfx:scrub_loop": {
+      "status": "approved",
+      "choice": "v2",
+      "source": "review/sfx/scrub_loop_v2.mp3",
+      "output": "public/sfx/scrub_loop.mp3",
+      "note": "",
+      "approvedAt": "2026-11-25T15:00:25.479525Z"
+    },
+    "sfx:spit": {
+      "status": "approved",
+      "choice": "v1",
+      "source": "review/sfx/spit_v1.mp3",
+      "output": "public/sfx/spit.mp3",
+      "note": "",
+      "approvedAt": "2026-11-25T15:00:25.479525Z"
+    },
+    "sfx:squeeze": {
+      "status": "approved",
+      "choice": "v2",
+      "source": "review/sfx/squeeze_v2.mp3",
+      "output": "public/sfx/squeeze.mp3",
+      "note": "",
+      "approvedAt": "2026-11-25T15:00:25.479525Z"
+    },
+    "sfx:star_tick": {
+      "status": "approved",
+      "choice": "v1",
+      "source": "review/sfx/star_tick_v1.mp3",
+      "output": "public/sfx/star_tick.mp3",
+      "note": "",
+      "approvedAt": "2026-11-25T15:00:25.479525Z"
+    },
+    "sfx:tap": {
+      "status": "approved",
+      "choice": "v1",
+      "source": "review/sfx/tap_v1.mp3",
+      "output": "public/sfx/tap.mp3",
+      "note": "",
+      "approvedAt": "2026-11-25T15:00:25.479525Z"
+    },
+    "sfx:tooth_ding": {
+      "status": "approved",
+      "choice": "v2",
+      "source": "review/sfx/tooth_ding_v2.mp3",
+      "output": "public/sfx/tooth_ding.mp3",
+      "note": "",
+      "approvedAt": "2026-11-25T15:00:25.479525Z"
+    },
+    "sfx:whoosh": {
+      "status": "approved",
+      "choice": "v1",
+      "source": "review/sfx/whoosh_v1.mp3",
+      "output": "public/sfx/whoosh.mp3",
+      "note": "",
+      "approvedAt": "2026-11-25T15:00:25.479525Z"
+    }
+  }
+}
