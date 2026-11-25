@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Game } from './game/Game';
 import { useStore } from './state/store';
-import { nextGoal, type Item } from './config/economy';
+import { nextGoal, REWARDS, type Item } from './config/economy';
 import { useT } from './i18n/ui';
 import { audio, haptic } from './audio/audio';
 import { Customizer, Swatch } from './ui/Customizer';
 import { looks } from './ui/looks';
-import type { HintKind } from './game/Game';
+import type { HintKind, ScreenPos } from './game/Game';
 
 const SFX = ['scrub_loop', 'electric_loop', 'foam_loop', 'squeeze', 'bubble_pop', 'food_pop', 'tooth_ding', 'spit', 'applause', 'star_tick', 'fanfare', 'tap', 'locked', 'whoosh'];
 const VOICE = ['welcome', 'choose', 'paste_instruct', 'paste_good', 'paste_too_much', 'paste_too_little', 'brush_start', 'hint_inside', 'hint_outside', 'hint_chewing', 'hint_circles', 'hint_rotate', 'hint_food', 'praise_1', 'praise_2', 'praise_3', 'halfway', 'almost', 'spit', 'finish', 'stars', 'unlock', 'locked', 'fact_twice', 'fact_baby'];
@@ -85,13 +85,13 @@ export default function App() {
   );
 }
 
-function TopBar({ back }: { back?: () => void }) {
+function TopBar({ back, extra = 0 }: { back?: () => void; extra?: number }) {
   const { lang, setLang, profile, sound, setSound } = useStore();
   const t = useT();
   return (
     <div className="topbar">
       {back ? <button className="round" onClick={() => { void audio.sfx('tap'); back(); }} aria-label={t('back')}>{lang === 'he' ? '→' : '←'}</button> : <span />}
-      <div className="star-pill" aria-label={t('stars')}>⭐ <b>{profile.stars}</b></div>
+      <div className="star-pill" id="star-pill" aria-label={t('stars')}>⭐ <b key={extra} className={extra ? 'bump' : ''}>{profile.stars + extra}</b></div>
       <div className="row">
         <button className="round" onClick={() => setSound(!sound)} aria-label={t('sound')}>{sound ? '🔊' : '🔇'}</button>
         <button className="round lang" onClick={() => { void audio.sfx('tap'); setLang(lang === 'he' ? 'en' : 'he'); }}>{lang === 'he' ? 'EN' : 'עב'}</button>
@@ -189,81 +189,125 @@ function PasteStep({ game }: { game: Game }) {
 
 const PRAISE = ['praise_1', 'praise_2', 'praise_3'];
 
+/** "+1 ⭐" that flies from where it was earned into the star counter. */
+function StarFloats({ items }: { items: { id: number; at: ScreenPos }[] }) {
+  const target = document.getElementById('star-pill')?.getBoundingClientRect();
+  const tx = target ? target.left + target.width / 2 : window.innerWidth / 2;
+  const ty = target ? target.top + target.height / 2 : 30;
+  return (
+    <>
+      {items.map(f => (
+        <span key={f.id} className="star-float" style={{ left: f.at.x, top: f.at.y, ['--dx' as string]: `${tx - f.at.x}px`, ['--dy' as string]: `${ty - f.at.y}px` }}>+1⭐</span>
+      ))}
+    </>
+  );
+}
+
 function BrushStep({ game }: { game: Game }) {
   const t = useT();
   const { go, finishSession } = useStore();
   const [overall, setOverall] = useState(0);
   const [doneCount, setDoneCount] = useState(0);
   const [view, setView] = useState(game.view);
-  const state = useRef({ lastDone: performance.now(), start: performance.now(), halfway: false, almost: false, rotated: false, foodHint: false, circles: false, food: 0, finished: false, doneCount: 0 });
+  const [earned, setEarned] = useState(0);
+  const [floats, setFloats] = useState<{ id: number; at: ScreenPos }[]>([]);
+  const [timeLeft, setTimeLeft] = useState(REWARDS.roundSeconds);
+  const state = useRef({ start: performance.now(), clockStart: 0, halfway: false, almost: false, circles: false, food: 0, bugs: 0, finished: false, doneCount: 0, firstBug: false });
   const electric = useStore(s => s.profile.equipped.brushType === 'type_electric');
 
   useEffect(() => {
     const s = state.current;
+    let floatId = 0;
+    const earn = (at: ScreenPos) => {
+      setEarned(e => e + 1);
+      const id = ++floatId;
+      setFloats(f => [...f, { id, at }]);
+      setTimeout(() => setFloats(f => f.filter(x => x.id !== id)), 1000);
+    };
+    const endRound = (reason: 'clean' | 'time') => {
+      if (s.finished) return;
+      s.finished = true;
+      void audio.loop('scrub_loop', false); void audio.loop('electric_loop', false); void audio.loop('foam_loop', false);
+      if (reason === 'time') game.timeUp();
+      void audio.say(reason === 'time' ? 'time_up' : 'spit', { priority: true });
+      setTimeout(() => { if (reason === 'clean') game.startSpit(); void audio.sfx('spit'); }, 900);
+      setTimeout(() => {
+        void audio.sfx('applause', 0.8);
+        void audio.say('finish', { priority: true });
+        const seconds = (performance.now() - s.start) / 1000;
+        finishSession({ teeth: game.teethDone, food: s.food, bugs: s.bugs, pasteRight: !!(window as unknown as { __pasteRight: boolean }).__pasteRight, seconds });
+        go('celebrate');
+      }, 3200);
+    };
     void audio.say('brush_start', { priority: true });
     const offs = [
       game.on('progress', (list, o) => {
         setOverall(o); setDoneCount(list.filter(x => x.done).length);
         if (o >= 0.5 && !s.halfway) { s.halfway = true; void audio.say('halfway'); }
       }),
-      game.on('toothDone', (_i, n) => {
-        s.lastDone = performance.now();
+      game.on('toothDone', (_i, n, at) => {
         s.doneCount = n;
+        earn(at);
         void audio.sfx('tooth_ding', 0.7, 0.95 + Math.random() * 0.15);
         haptic(25);
         if (n >= game.jaws.teeth.length - 3 && !s.almost && n < game.jaws.teeth.length) { s.almost = true; void audio.say('almost'); }
-        else if (n % 4 === 0) void audio.say(PRAISE[Math.floor(Math.random() * PRAISE.length)], { cooldown: 4 });
+        else if (n % 3 === 0) void audio.say(PRAISE[Math.floor(Math.random() * PRAISE.length)], { cooldown: 4 });
       }),
-      game.on('foodRemoved', (n) => { s.food = n; void audio.sfx('food_pop'); if (n === 1) void audio.say('praise_2'); }),
+      game.on('foodRemoved', (n, _t, at) => { s.food = n; earn(at); void audio.sfx('food_pop'); if (n === 1) void audio.say('praise_2'); }),
+      game.on('bugPopped', (n, _t, at) => {
+        s.bugs = n; earn(at);
+        void audio.sfx('food_pop', 1, 1.5); void audio.sfx('bubble_pop', 0.8, 0.7);
+        haptic([15, 30, 15]);
+        void audio.say('bug_got', { cooldown: 3 });
+      }),
       game.on('brushing', on => {
+        if (on && !s.clockStart) s.clockStart = performance.now(); // the 2-minute clock starts at the first brush stroke
         void audio.loop(electric ? 'electric_loop' : 'scrub_loop', on, electric ? 0.45 : 0.7);
         void audio.loop('foam_loop', on, 0.25);
         if (on && electric) haptic(200);
       }),
       game.on('bubblePop', () => { if (Math.random() < 0.4) void audio.sfx('bubble_pop', 0.25, 0.8 + Math.random() * 0.6); }),
-      game.on('rotated', () => { s.rotated = true; }),
       game.on('hints', (kind: HintKind | null) => {
         if (!kind) return;
-        const line = kind === 'food' ? 'hint_food' : kind === 'inner' ? 'hint_inside' : kind === 'chewing' ? 'hint_chewing' : 'hint_outside';
+        const line = kind === 'bug' ? 'hint_bugs' : kind === 'food' ? 'hint_food' : kind === 'inner' ? 'hint_inside' : kind === 'chewing' ? 'hint_chewing' : 'hint_outside';
         void audio.say(line, { cooldown: 8 });
         void audio.sfx('tooth_ding', 0.35, 1.4);
       }),
       game.on('autoTurn', () => { void audio.sfx('whoosh', 0.7); setView(game.view); }),
-      game.on('allClean', () => {
-        if (s.finished) return;
-        s.finished = true;
-        void audio.loop('scrub_loop', false); void audio.loop('electric_loop', false); void audio.loop('foam_loop', false);
-        void audio.say('spit', { priority: true });
-        setTimeout(() => { game.startSpit(); void audio.sfx('spit'); }, 900);
-        setTimeout(() => {
-          void audio.sfx('applause', 0.8);
-          void audio.say('finish', { priority: true });
-          const seconds = (performance.now() - s.start) / 1000;
-          finishSession({ teeth: game.jaws.teeth.length, food: s.food, pasteRight: !!(window as unknown as { __pasteRight: boolean }).__pasteRight, seconds });
-          go('celebrate');
-        }, 3200);
-      }),
+      game.on('allClean', () => endRound('clean')),
     ];
-    // the helper arrows carry the "where to brush" hints; the voice adds one technique tip
     const iv = setInterval(() => {
+      if (s.finished) return;
       const elapsed = (performance.now() - s.start) / 1000;
-      if (!s.finished && !s.circles && elapsed > 14 && !electric) { s.circles = true; void audio.say('hint_circles'); }
-    }, 1500);
+      if (!s.circles && elapsed > 14 && !electric) { s.circles = true; void audio.say('hint_circles'); }
+      if (s.clockStart) {
+        const left = Math.max(0, REWARDS.roundSeconds - (performance.now() - s.clockStart) / 1000);
+        setTimeLeft(left);
+        if (left <= 0) endRound('time');
+      }
+    }, 250);
     return () => {
       offs.forEach(f => f()); clearInterval(iv);
       void audio.loop('scrub_loop', false); void audio.loop('electric_loop', false); void audio.loop('foam_loop', false);
     };
   }, [game]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const pick = (v: 'front' | 'upper' | 'lower') => { void audio.sfx('whoosh', 0.6); game.setView(v); setView(v); state.current.rotated = true; };
+  const pick = (v: 'front' | 'upper' | 'lower') => { void audio.sfx('whoosh', 0.6); game.setView(v); setView(v); };
+  const frac = timeLeft / REWARDS.roundSeconds;
   return (
     <div className="overlay brush">
-      <TopBar back={() => go('home')} />
+      <TopBar back={() => go('home')} extra={earned} />
       <div className="sparkle-meter" aria-label={`${doneCount}/${game.jaws.teeth.length}`}>
-        <span className="tooth-ico">🦷</span>
+        <svg className={`clock ${timeLeft < 15 ? 'hurry' : ''}`} viewBox="0 0 36 36" aria-hidden>
+          <circle cx="18" cy="18" r="15" fill="#fff" stroke="#e3edf4" strokeWidth="5" />
+          <circle cx="18" cy="18" r="15" fill="none" stroke="#3fa9f5" strokeWidth="5" strokeLinecap="round"
+            strokeDasharray={`${(2 * Math.PI * 15).toFixed(1)}`} strokeDashoffset={`${((1 - frac) * 2 * Math.PI * 15).toFixed(1)}`} transform="rotate(-90 18 18)" />
+          <text x="18" y="22.5" textAnchor="middle" fontSize={timeLeft > 10 ? 13 : 14} fontWeight="800" fill="#23324a">{timeLeft > 10 ? '⏳' : Math.ceil(timeLeft)}</text>
+        </svg>
         <div className="track"><div style={{ width: `${overall * 100}%` }} /></div>
         <span className="tooth-ico">✨</span>
       </div>
+      <StarFloats items={floats} />
       <div className="views">
         <button className={view === 'upper' ? 'on' : ''} onClick={() => pick('upper')} aria-label={t('top')}><ViewIcon kind="upper" /></button>
         <button className={view === 'front' ? 'on' : ''} onClick={() => pick('front')} aria-label={t('front')}><ViewIcon kind="front" /></button>
@@ -295,6 +339,7 @@ function Celebrate() {
   const rows = useMemo(() => r ? [
     { k: t('teethClean'), v: r.teeth, icon: '🦷' },
     { k: t('foodBits'), v: r.food, icon: '🍞' },
+    ...(r.bugs ? [{ k: t('bugs'), v: r.bugs, icon: '🐛' }] : []),
     ...(r.pasteRight ? [{ k: t('pasteBonus'), v: 3, icon: '🫛' }] : []),
     ...(r.firstOfDay ? [{ k: t('dayBonus'), v: 5, icon: '🌞' }] : []),
     ...(r.streakBonus ? [{ k: t('streakBonus'), v: r.streakBonus, icon: '🔥' }] : []),

@@ -7,17 +7,20 @@ import { Paste, createTube, type PasteLook } from './Paste';
 import { Foam, Sparkles } from './Effects';
 import { FoodBits } from './Food';
 import { HelperArrows } from './HelperArrows';
+import { SugarBugs } from './SugarBugs';
 
-export type HintKind = 'outer' | 'inner' | 'chewing' | 'food';
+export type HintKind = 'outer' | 'inner' | 'chewing' | 'food' | 'bug';
+export interface ScreenPos { x: number; y: number }
 
 export type Phase = 'home' | 'customize' | 'paste' | 'brush' | 'spit' | 'done';
 export type View = 'front' | 'upper' | 'lower';
 
 export interface GameEvents {
   progress: (teeth: SideProgress[], overall: number) => void;
-  toothDone: (index: number, doneCount: number) => void;
+  toothDone: (index: number, doneCount: number, at: ScreenPos) => void;
   allClean: () => void;
-  foodRemoved: (removed: number, total: number) => void;
+  foodRemoved: (removed: number, total: number, at: ScreenPos) => void;
+  bugPopped: (popped: number, total: number, at: ScreenPos) => void;
   brushing: (active: boolean) => void;
   pasteAmount: (amount: number) => void;
   bubblePop: () => void;
@@ -41,6 +44,7 @@ export class Game {
   readonly food = new FoodBits();
   readonly sparkles = new Sparkles();
   readonly helpers = new HelperArrows(3);
+  readonly bugs = new SugarBugs();
   private idle = 0;
   private hintState: 'none' | 'turning' | 'shown' = 'none';
   private turnTimer = 0;
@@ -82,7 +86,7 @@ export class Game {
   brushingTime = 0;
   private doneCount = 0;
   private wasActive = false;
-  private readonly cleanSnap = 0.9;
+  private readonly cleanSnap = 0.8;
 
   constructor(canvas: HTMLCanvasElement, brushLook: BrushLook, pasteLook: PasteLook) {
     this.stage = new Stage(canvas, detectQuality());
@@ -101,7 +105,11 @@ export class Game {
     this.foam.onPop = () => this.emit('bubblePop');
     this.food.onRemoved = (p) => {
       this.sparkles.burst(p, 6, 6);
-      this.emit('foodRemoved', this.food.total - this.food.remaining, this.food.total);
+      this.emit('foodRemoved', this.food.total - this.food.remaining, this.food.total, this.toScreen(p));
+    };
+    this.bugs.onPopped = (p) => {
+      this.sparkles.burst(p, 10, 7);
+      this.emit('bugPopped', this.bugs.total - this.bugs.remaining, this.bugs.total, this.toScreen(p));
     };
     this.jaws.resetDirt(1);
     for (const t of this.jaws.teeth) { t.dirt.fill(0); (t.mesh.geometry.getAttribute('dirt') as THREE.BufferAttribute).needsUpdate = true; }
@@ -145,7 +153,7 @@ export class Game {
       this.paste.setAmount(0);
     }
     if (p === 'brush') this.startBrushing();
-    if (p === 'spit') { this.spitT = 0; this.mode = 'none'; this.contact = false; }
+    if (p === 'spit') { this.spitT = 0; this.mode = 'none'; this.contact = false; this.bugs.clear(); }
     if (p === 'home' || p === 'done') this.setView('front');
   }
 
@@ -161,7 +169,8 @@ export class Game {
   private startBrushing() {
     const seed = Math.floor(Math.random() * 1e6);
     this.jaws.resetDirt(seed);
-    this.food.reset(this.jaws, seed + 5, 7);
+    this.food.reset(this.jaws, seed + 5, 6);
+    this.bugs.reset(this.jaws, seed + 9, 6);
     this.foam.clear();
     this.doneCount = 0;
     this.brushingTime = 0;
@@ -336,6 +345,7 @@ export class Game {
     this.food.update(dt);
     this.sparkles.update(dt);
     this.helpers.update(dt);
+    this.bugs.update(dt, this.stage.camera);
   }
 
   private updateModel(dt: number) {
@@ -445,10 +455,12 @@ export class Game {
       if (this.paste.mesh.visible) this.paste.mesh.visible = false;
       const electric = this.brush.look.type === 'electric';
       if (this.hitIsTooth) {
-        const rate = (electric ? 2.6 : 1.7) * (0.75 + 0.5 * this.pointerSpeed);
-        this.jaws.clean(this.hitPoint, this.hitNormal, electric ? 5.4 : 5.8, rate * dt);
+        // tuned so a full clean takes about a minute for a 5-7 year old
+        const rate = (electric ? 4.6 : 3.6) * (0.8 + 0.4 * this.pointerSpeed);
+        this.jaws.clean(this.hitPoint, this.hitNormal, electric ? 7.5 : 8, rate * dt);
       }
-      this.food.brush(this.hitPoint, 6.5, dt * (electric ? 2.2 : 1.5), this.stage.scene);
+      this.food.brush(this.hitPoint, 8, dt * (electric ? 3.2 : 2.4), this.stage.scene);
+      this.bugs.brush(this.hitPoint, 7.5);
       const intensity = this.paste.consume(dt, 0.011);
       const lp = this.content.worldToLocal(this.hitPoint.clone());
       const inv = new THREE.Matrix4().copy(this.content.matrixWorld).invert();
@@ -464,6 +476,23 @@ export class Game {
       this.pushProgress();
     }
   }
+
+  /** World position → CSS pixels on the canvas. */
+  toScreen(world: THREE.Vector3): ScreenPos {
+    const v = world.clone().project(this.stage.camera);
+    const r = this.stage.canvas.getBoundingClientRect();
+    return { x: r.left + (v.x * 0.5 + 0.5) * r.width, y: r.top + (-v.y * 0.5 + 0.5) * r.height };
+  }
+
+  /** End the round early (2-minute timer ran out). */
+  timeUp() {
+    if (this.phase !== 'brush') return;
+    this.contact = false;
+    this.emit('brushing', false);
+    this.startSpit();
+  }
+
+  get teethDone() { return this.doneCount; }
 
   // ---------- helper arrows ----------
   private clearHints() {
@@ -486,6 +515,9 @@ export class Game {
     // spots are kept in the mesh's local space so they stay valid when the jaws turn
     type Cand = { kind: HintKind; priority: number; mesh: THREE.Object3D; space: THREE.Object3D; spots: { p: THREE.Vector3; n: THREE.Vector3 }[] };
     const cands: Cand[] = [];
+    for (const b of this.bugs.live()) {
+      cands.push({ kind: 'bug', priority: 2e6, mesh: b.tooth.mesh, space: b.tooth.mesh, spots: [{ p: b.group.position.clone(), n: b.normal.clone() }] });
+    }
     for (const m of this.food.meshes()) {
       const n = (m.userData.normal as THREE.Vector3).clone();
       cands.push({ kind: 'food', priority: 1e6, mesh: m, space: this.food.group, spots: [{ p: m.position.clone(), n }] });
@@ -617,7 +649,7 @@ export class Game {
           this.doneCount++;
           const c = t.mesh.geometry.boundingSphere!.center.clone().applyMatrix4(t.mesh.matrixWorld);
           this.sparkles.burst(c, 12, 9);
-          this.emit('toothDone', t.index, this.doneCount);
+          this.emit('toothDone', t.index, this.doneCount, this.toScreen(c));
         }
       }
       const q = this.jaws.sideProgress(t);

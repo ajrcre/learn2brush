@@ -15,7 +15,7 @@ export interface Profile {
 }
 
 export interface SessionResult {
-  teeth: number; food: number; pasteRight: boolean; firstOfDay: boolean; streakBonus: number; steady: boolean; total: number;
+  teeth: number; food: number; bugs: number; pasteRight: boolean; firstOfDay: boolean; streakBonus: number; steady: boolean; total: number;
 }
 
 interface State {
@@ -31,7 +31,7 @@ interface State {
   equip: (cat: Category, id: string) => void;
   buy: (id: string) => boolean;
   owns: (id: string) => boolean;
-  finishSession: (r: { teeth: number; food: number; pasteRight: boolean; seconds: number }) => SessionResult;
+  finishSession: (r: { teeth: number; food: number; bugs: number; pasteRight: boolean; seconds: number }) => SessionResult;
   setSound: (on: boolean) => void;
   setDebug: (on: boolean) => void;
   resetProfile: () => void;
@@ -74,7 +74,7 @@ export const useStore = create<State>((set, get) => ({
     set({ profile }); persist(profile);
     return true;
   },
-  finishSession: ({ teeth, food, pasteRight, seconds }) => {
+  finishSession: ({ teeth, food, bugs, pasteRight, seconds }) => {
     const p = get().profile;
     const d = today();
     const firstOfDay = p.lastBrushDay !== d;
@@ -82,10 +82,10 @@ export const useStore = create<State>((set, get) => ({
     const streak = firstOfDay ? (p.lastBrushDay === yesterday ? p.streak + 1 : 1) : p.streak;
     const streakBonus = firstOfDay && streak >= 2 ? Math.min(streak, REWARDS.streakCap) : 0;
     const steady = seconds >= REWARDS.steadySeconds;
-    const total = teeth * REWARDS.perTooth + food * REWARDS.perFood + (pasteRight ? REWARDS.pasteRight : 0)
+    const total = teeth * REWARDS.perTooth + food * REWARDS.perFood + bugs * REWARDS.perBug + (pasteRight ? REWARDS.pasteRight : 0)
       + (firstOfDay ? REWARDS.firstBrushOfDay : 0) + streakBonus + (steady ? REWARDS.steadyBonus : 0);
     const profile: Profile = { ...p, stars: p.stars + total, lastBrushDay: d, streak, sessions: p.sessions + 1, lastSessionStars: total };
-    const result = { teeth, food, pasteRight, firstOfDay, streakBonus, steady, total };
+    const result = { teeth, food, bugs, pasteRight, firstOfDay, streakBonus, steady, total };
     set({ profile, lastResult: result }); persist(profile);
     return result;
   },

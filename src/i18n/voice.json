@@ -100,6 +100,18 @@
     "fact_baby": {
       "en": "Baby teeth save the space for your big teeth!",
       "he": "שִׁנֵּי הֶחָלָב שׁוֹמְרוֹת מָקוֹם לַשִּׁנַּיִם הַגְּדוֹלוֹת!"
+    },
+    "hint_bugs": {
+      "en": "Sugar bugs! Brush them away!",
+      "he": "אוֹי, חַיְדַּקֵּי סֻכָּר! מְצַחְצְחִים אוֹתָם!"
+    },
+    "time_up": {
+      "en": "Two minutes! Great brushing!",
+      "he": "שְׁתֵּי דַּקּוֹת! צִחְצַחְנוּ מְצֻיָּן!"
+    },
+    "bug_got": {
+      "en": "Got it!",
+      "he": "תָּפַסְנוּ!"
     }
   }
 }

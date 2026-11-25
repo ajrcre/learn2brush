@@ -18,6 +18,9 @@ export interface Item {
 export const REWARDS = {
   perTooth: 1,
   perFood: 1,
+  perBug: 1,
+  /** brushing round length in seconds (dentists recommend 2 minutes) */
+  roundSeconds: 120,
   pasteRight: 3,
   firstBrushOfDay: 5,
   /** bonus = min(streakDays, streakCap) when streak ≥ 2 */

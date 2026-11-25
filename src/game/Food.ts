@@ -94,6 +94,7 @@ export class FoodBits {
       const kind = kinds[i % kinds.length];
       const mesh = makeMesh(kind, seed + i);
       mesh.castShadow = true;
+      mesh.scale.setScalar(1.6); // big enough to spot easily
       // place in tooth-local space, then convert to jaw-root space
       const { w, t, h, kind: tk } = tooth.spec;
       const local = new THREE.Vector3();
@@ -163,7 +164,7 @@ export class FoodBits {
       b.mesh.rotation.x += b.spin.x * dt;
       b.mesh.rotation.y += b.spin.y * dt;
       const s = Math.max(0, 1 - b.age / 1.4);
-      b.mesh.scale.setScalar(s);
+      b.mesh.scale.setScalar(s * 1.6);
       if (b.age > 1.4) b.mesh.removeFromParent();
     }
   }

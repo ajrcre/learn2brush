@@ -30,6 +30,7 @@ const UI = {
   nextPrize: { en: 'Next prize', he: 'הַפְּרָס הַבָּא' },
   teethClean: { en: 'Clean teeth', he: 'שִׁנַּיִם נְקִיּוֹת' },
   foodBits: { en: 'Food bits', he: 'שְׁאֵרִיּוֹת אֹכֶל' },
+  bugs: { en: 'Sugar bugs', he: 'חַיְדַּקֵּי סֻכָּר' },
   pasteBonus: { en: 'Just the right paste', he: 'בְּדִיּוּק מִשְׁחָה' },
   dayBonus: { en: 'First brush today', he: 'צִחְצוּחַ רִאשׁוֹן הַיּוֹם' },
   streakBonus: { en: 'Days in a row', he: 'יָמִים בִּרְצִיפוּת' },

@@ -288,8 +288,9 @@ export class HumanJaws {
         const d2 = dx * dx + dy * dy + dz * dz;
         if (d2 > r2) continue;
         const facing = nrm.getX(k) * ln.x + nrm.getY(k) * ln.y + nrm.getZ(k) * ln.z;
-        if (facing < 0.05) continue;
-        const fall = (1 - d2 / r2) * Math.min(1, facing * 1.6);
+        if (facing < -0.1) continue;
+        // generous: surfaces at an angle to the brush still get cleaned a bit
+        const fall = (1 - (d2 / r2) * 0.6) * Math.min(1, 0.3 + Math.max(0, facing) * 1.4);
         const before = tooth.dirt[k];
         const after = Math.max(0, before - amount * fall);
         tooth.dirt[k] = after;

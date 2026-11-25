@@ -51,7 +51,9 @@ export function createEnamelMaterial(incisal = 1): THREE.MeshPhysicalMaterial & 
 attribute float dirt; attribute float crownT;
 varying float vDirt; varying float vCrownT; varying vec3 vObjPos;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
-vDirt = dirt; vCrownT = crownT; vObjPos = position;`);
+vDirt = dirt; vCrownT = crownT; vObjPos = position;
+// plaque is a real raised layer, so it reads as "stuff" sitting on the tooth
+transformed += objectNormal * dirt * 0.32;`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
 uniform float uGlow; uniform float uIncisal; uniform float uTime;
@@ -62,26 +64,30 @@ float l2b_plaque;`)
 {
   float n = l2b_fbm(vObjPos * 0.45);
   vec3 cerv = vec3(0.93, 0.85, 0.70);
-  vec3 mid  = vec3(0.985, 0.965, 0.925);
+  vec3 mid  = vec3(0.995, 0.985, 0.96);
   vec3 inc  = vec3(0.84, 0.88, 0.93);
   vec3 enamel = mix(cerv, mid, smoothstep(0.02, 0.45, vCrownT));
   enamel = mix(enamel, inc, smoothstep(0.78, 1.0, vCrownT) * uIncisal * 0.7);
   diffuseColor.rgb = enamel * (0.965 + 0.07 * n);
   float pn = l2b_fbm(vObjPos * 0.55 + 7.0);
-  l2b_plaque = smoothstep(0.12, 0.5, vDirt * (0.5 + 0.9 * pn));
-  vec3 plaqueCol = mix(vec3(0.93, 0.80, 0.42), vec3(0.80, 0.64, 0.30), pn);
-  diffuseColor.rgb = mix(diffuseColor.rgb, plaqueCol, l2b_plaque * 0.9);
+  float speck = l2b_noise(vObjPos * 2.2 + 11.0);
+  l2b_plaque = smoothstep(0.05, 0.32, vDirt * (0.65 + 0.7 * pn));
+  // sticky yellow plaque with greenish patches and darker specks: easy to tell from clean white enamel
+  vec3 plaqueCol = mix(vec3(0.95, 0.80, 0.22), vec3(0.66, 0.72, 0.20), smoothstep(0.45, 0.75, pn));
+  plaqueCol *= 0.82 + 0.25 * smoothstep(0.25, 0.7, speck);
+  plaqueCol = mix(plaqueCol, vec3(0.45, 0.36, 0.14), smoothstep(0.82, 0.92, speck) * 0.7);
+  diffuseColor.rgb = mix(diffuseColor.rgb, plaqueCol, l2b_plaque);
 }`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-roughnessFactor = mix(roughnessFactor, 0.78, l2b_plaque);`)
+roughnessFactor = mix(roughnessFactor, 0.88, l2b_plaque);`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
 {
   // gentle enamel waviness + soft lumpy plaque
-  float hh = l2b_fbm(vObjPos * 0.7) * 0.2 + l2b_plaque * l2b_fbm(vObjPos * 0.9 + 3.0);
-  normal = l2b_bump(normal, -vViewPosition, hh, 0.15 + l2b_plaque * 0.35);
+  float hh = l2b_fbm(vObjPos * 0.7) * 0.2 + l2b_plaque * l2b_fbm(vObjPos * 1.3 + 3.0) * 1.4;
+  normal = l2b_bump(normal, -vViewPosition, hh, 0.15 + l2b_plaque * 0.6);
 }`)
       .replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>
-material.clearcoat *= (1.0 - l2b_plaque * 0.85);`)
+material.clearcoat *= (1.0 - l2b_plaque);`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
 // fake subsurface translucency lift + celebration glow
 totalEmissiveRadiance += diffuseColor.rgb * (0.05 + 0.35 * uGlow);`);
