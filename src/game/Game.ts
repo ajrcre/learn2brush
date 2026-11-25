@@ -99,6 +99,7 @@ export class Game {
     const ro = new ResizeObserver(() => this.resize());
     ro.observe(canvas);
     this.resize();
+    void this.stage.loadBackground('/img/bg.jpg');
     this.setPhase('home');
   }
 
@@ -292,25 +293,7 @@ export class Game {
     cam.position.z = damp(cam.position.z, this.camPos.z, 4, dt);
     cam.lookAt(this.camTarget);
 
-    // ---- model rotation / focus ----
-    if (this.phase === 'home' || this.phase === 'done' || this.phase === 'spit') {
-      if (this.mode !== 'rotate') { this.turntable += dt * 0.35; this.yawT = Math.sin(this.turntable) * 0.6; }
-    }
-    this.yaw = damp(this.yaw, this.yawT, 8, dt);
-    this.pitch = damp(this.pitch, this.pitchT, 8, dt);
-    this.model.rotation.set(this.pitch, this.yaw, 0, 'XYZ');
-    const fu = this.phase === 'brush' && this.view === 'lower' ? 0 : 1;
-    const fl = this.phase === 'brush' && this.view === 'upper' ? 0 : 1;
-    this.focusUpper = damp(this.focusUpper, fu, 6, dt);
-    this.focusLower = damp(this.focusLower, fl, 6, dt);
-    this.jaws.upper.position.y = 6.5 + (1 - this.focusUpper) * 80;
-    this.jaws.lower.position.y = -6.5 - (1 - this.focusLower) * 80;
-    this.jaws.upper.visible = this.focusUpper > 0.05;
-    this.jaws.lower.visible = this.focusLower > 0.05;
-    const cy = this.view === 'upper' && this.phase === 'brush' ? -6.5 : this.view === 'lower' && this.phase === 'brush' ? 6.5 : 0;
-    this.contentY = damp(this.contentY, cy, 6, dt);
-    this.content.position.y = this.contentY;
-    this.model.updateMatrixWorld(true);
+    this.updateModel(dt);
 
     // ---- brush ----
     this.brush.update(dt, this.contact);
@@ -330,6 +313,28 @@ export class Game {
     this.foam.update(dt);
     this.food.update(dt);
     this.sparkles.update(dt);
+  }
+
+  private updateModel(dt: number) {
+    if (this.phase === 'home' || this.phase === 'done' || this.phase === 'spit') {
+      if (this.mode !== 'rotate') { this.turntable += dt * 0.35; this.yawT = Math.sin(this.turntable) * 0.6; }
+    }
+    this.yaw = damp(this.yaw, this.yawT, 8, dt);
+    this.pitch = damp(this.pitch, this.pitchT, 8, dt);
+    this.model.rotation.set(this.pitch, this.yaw, 0, 'XYZ');
+    const fu = this.phase === 'brush' && this.view === 'lower' ? 0 : 1;
+    const fl = this.phase === 'brush' && this.view === 'upper' ? 0 : 1;
+    this.focusUpper = damp(this.focusUpper, fu, 6, dt);
+    this.focusLower = damp(this.focusLower, fl, 6, dt);
+    this.jaws.upper.position.y = 6.5 + (1 - this.focusUpper) * 80;
+    this.jaws.lower.position.y = -6.5 - (1 - this.focusLower) * 80;
+    this.jaws.upper.visible = this.focusUpper > 0.05;
+    this.jaws.lower.visible = this.focusLower > 0.05;
+    const cy = this.view === 'upper' && this.phase === 'brush' ? -6.5 : this.view === 'lower' && this.phase === 'brush' ? 6.5 : 0;
+    this.contentY = damp(this.contentY, cy, 6, dt);
+    this.content.position.y = this.contentY;
+    this.model.updateMatrixWorld(true);
+
   }
 
   private updateShowcase(dt: number) {
@@ -382,13 +387,13 @@ export class Game {
       const ndcPark = new THREE.Vector3(cam.aspect < 0.9 ? 0.55 : 0.62, cam.aspect < 0.9 ? -0.45 : -0.35, 0.5).unproject(cam);
       const dir = ndcPark.sub(cam.position).normalize();
       target = cam.position.clone().addScaledVector(dir, cam.position.length() * 0.92);
-      normal = new THREE.Vector3(-0.55, 0.1, 1).normalize();
+      normal = new THREE.Vector3(-1, 0.2, 0.3).normalize();
     }
     // orientation: brush +Y = surface normal, handle (+X) points out of the mouth & towards the viewer
     const archCenter = this.content.localToWorld(this.tmpV.set(0, 0, -6));
     const out = target.clone().sub(archCenter);
     out.y *= 0.3;
-    out.normalize().add(new THREE.Vector3(0, 0, 0.9)).add(new THREE.Vector3(0.35, 0, 0));
+    out.normalize().add(new THREE.Vector3(0.45, 0, 0.3));
     const x = out.addScaledVector(normal, -out.dot(normal));
     if (x.lengthSq() < 1e-4) x.set(1, 0, 0).addScaledVector(normal, -normal.x);
     x.normalize();
@@ -495,6 +500,67 @@ export class Game {
   /** Debug helper: clean everything instantly (used by tests and the review toggle). */
   debugCleanAll() {
     for (const t of this.jaws.teeth) { t.dirt.fill(0); (t.mesh.geometry.getAttribute('dirt') as THREE.BufferAttribute).needsUpdate = true; }
+    this.pushProgress();
+  }
+
+  /**
+   * Automated check: for each tooth side, is there a reachable pose (view preset + drag rotation)
+   * where a tap lands directly on that side of that tooth? Returns unreachable entries.
+   */
+  debugReachability() {
+    const saved = { view: this.view, yawT: this.yawT, pitchT: this.pitchT };
+    const poses: [View, number, number][] = [];
+    for (const v of ['front', 'upper', 'lower'] as View[])
+      for (const yaw of [-1.4, -0.9, -0.45, 0, 0.45, 0.9, 1.4])
+        for (const dp of [-0.25, 0, 0.25]) poses.push([v, yaw, dp]);
+    const sides = ['outer', 'inner', 'chewing'] as const;
+    const reach: boolean[][] = this.jaws.teeth.map(() => [false, false, false]);
+    for (const [v, yaw, dp] of poses) {
+      this.setView(v);
+      this.yawT = yaw;
+      this.pitchT = THREE.MathUtils.clamp(this.pitchT + dp, -1.25, 1.25);
+      this.updateModel(100);
+      this.model.updateMatrixWorld(true);
+      const targets = [...this.jaws.toothMeshes.filter(m => m.parent!.visible), ...this.jaws.gums.filter(g => g.parent!.visible)];
+      this.jaws.teeth.forEach((t, ti) => {
+        if (!t.mesh.parent!.visible) return;
+        const pos = t.mesh.geometry.getAttribute('position');
+        sides.forEach((_, si) => {
+          if (reach[ti][si]) return;
+          // try several vertices of this side
+          for (let k = 0; k < pos.count; k += 7) {
+            if (t.sides[k] !== si) continue;
+            const w = new THREE.Vector3().fromBufferAttribute(pos, k).applyMatrix4(t.mesh.matrixWorld);
+            const ndc = w.clone().project(this.stage.camera);
+            if (Math.abs(ndc.x) > 0.95 || Math.abs(ndc.y) > 0.9) continue;
+            this.ray.setFromCamera(new THREE.Vector2(ndc.x, ndc.y), this.stage.camera);
+            const h = this.ray.intersectObjects(targets, false)[0];
+            if (h && h.object === t.mesh && h.face && t.sides[h.face.a] === si) { reach[ti][si] = true; break; }
+          }
+        });
+      });
+    }
+    this.view = saved.view; this.yawT = saved.yawT; this.pitchT = saved.pitchT;
+    const missing: string[] = [];
+    reach.forEach((r, ti) => r.forEach((ok, si) => { if (!ok) missing.push(`${ti}:${sides[si]}`); }));
+    return missing;
+  }
+
+  /** Simulate brushing one side of one tooth directly (bypasses the pointer). */
+  debugBrushSide(index: number, side: 'outer' | 'inner' | 'chewing', seconds = 2) {
+    const t = this.jaws.teeth[index];
+    const si = side === 'outer' ? SIDE_OUTER : side === 'inner' ? SIDE_INNER : SIDE_CHEWING;
+    const pos = t.mesh.geometry.getAttribute('position');
+    const nrm = t.mesh.geometry.getAttribute('normal');
+    const steps = Math.round(seconds * 30);
+    const ids: number[] = [];
+    for (let k = 0; k < pos.count; k++) if (t.sides[k] === si) ids.push(k);
+    for (let i = 0; i < steps; i++) {
+      const k = ids[Math.floor((i / steps) * ids.length)];
+      const p = new THREE.Vector3().fromBufferAttribute(pos, k).applyMatrix4(t.mesh.matrixWorld);
+      const n = new THREE.Vector3().fromBufferAttribute(nrm, k).transformDirection(t.mesh.matrixWorld);
+      this.jaws.clean(p, n, 5.8, 1.7 / 30);
+    }
     this.pushProgress();
   }
 

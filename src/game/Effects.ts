@@ -48,7 +48,7 @@ export class Foam {
   washing = 0;
   onPop?: () => void;
 
-  constructor(readonly maxBubbles = 260, readonly maxFoam = 900) {
+  constructor(readonly maxBubbles = 220, readonly maxFoam = 450) {
     const bg = new THREE.SphereGeometry(1, 18, 12);
     const seeds = new Float32Array(maxBubbles).map(() => Math.random());
     bg.setAttribute('aSeed', new THREE.InstancedBufferAttribute(seeds, 1));
@@ -100,7 +100,7 @@ export class Foam {
 
   /** Spawn at a point in jaw-local space with local normal. intensity 0..1 */
   spawn(localPos: THREE.Vector3, localNormal: THREE.Vector3, intensity: number, dt: number) {
-    const foamRate = 120 * intensity, bubbleRate = 22 * intensity;
+    const foamRate = 40 * intensity, bubbleRate = 16 * intensity;
     let nf = foamRate * dt + Math.random();
     while (nf-- >= 1) {
       const p = this.foamP[this.foamNext];
@@ -109,7 +109,7 @@ export class Foam {
       jitter.addScaledVector(localNormal, -jitter.dot(localNormal));
       p.pos.copy(localPos).add(jitter).addScaledVector(localNormal, 0.3 + Math.random() * 1.6);
       p.nrm.copy(localNormal);
-      p.born = this.time; p.life = 9999; p.size = 0.45 + Math.random() * 1.0; p.alive = true;
+      p.born = this.time; p.life = 5 + Math.random() * 6; p.size = 0.35 + Math.random() * 0.75; p.alive = true;
     }
     let nb = bubbleRate * dt + Math.random() * 0.5;
     while (nb-- >= 1) {
@@ -155,8 +155,10 @@ export class Foam {
       const p = this.foamP[i];
       if (!p.alive) continue;
       const age = t - p.born;
+      if (age > p.life && wash === 0) { p.alive = false; this.foam.setMatrixAt(i, this.m4.makeScale(0, 0, 0)); continue; }
       const grow = Math.min(1, age * 6);
-      let sc = p.size * grow * (1 + 0.04 * Math.sin(t * 3 + p.seed * 10));
+      const fade = Math.min(1, (p.life - age) / 1.5); // foam slowly settles away so the teeth stay visible
+      let sc = p.size * grow * Math.max(0, fade) * (1 + 0.04 * Math.sin(t * 3 + p.seed * 10));
       this.v.copy(p.pos);
       if (wash > 0) {
         sc *= Math.max(0, 1 - wash * (1.2 + p.seed));

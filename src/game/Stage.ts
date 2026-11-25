@@ -94,6 +94,36 @@ export class Stage {
     this.composer.addPass(new EffectPass(this.camera, ...effects));
   }
 
+  private bgTex?: THREE.Texture;
+
+  /** Use an approved painted backdrop (if present), scaled to cover the viewport. */
+  async loadBackground(url: string) {
+    try {
+      const res = await fetch(url, { method: 'HEAD' });
+      if (!res.ok || !(res.headers.get('content-type') ?? '').startsWith('image')) return;
+      const tex = await new THREE.TextureLoader().loadAsync(url);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      this.bgTex = tex;
+      this.scene.background = tex;
+      this.fitBackground();
+    } catch { /* keep gradient */ }
+  }
+
+  private fitBackground() {
+    const tex = this.bgTex;
+    const img = tex?.image as { width: number; height: number } | undefined;
+    if (!tex || !img) return;
+    const viewAspect = this.camera.aspect;
+    const imgAspect = img.width / img.height;
+    if (viewAspect > imgAspect) {
+      tex.repeat.set(1, imgAspect / viewAspect);
+      tex.offset.set(0, (1 - tex.repeat.y) / 2);
+    } else {
+      tex.repeat.set(viewAspect / imgAspect, 1);
+      tex.offset.set((1 - tex.repeat.x) / 2, 0);
+    }
+  }
+
   resize(w: number, h: number) {
     const maxDpr = this.quality === 'high' ? 2 : this.quality === 'medium' ? 1.5 : 1.25;
     const dpr = Math.min(window.devicePixelRatio || 1, maxDpr);
@@ -102,6 +132,7 @@ export class Stage {
     this.composer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    this.fitBackground();
   }
 
   render(dt: number) {
