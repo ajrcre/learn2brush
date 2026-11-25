@@ -1,5 +1,5 @@
-// Record every spoken line in the chosen voice. Hebrew keeps its Nikud except the words listed in
-// assets/voice.json "plainWords"; a line can override with "he_tts".
+// Record every spoken line in the chosen voice. Hebrew keeps its Nikud except the exact sentences in
+// assets/voice.json "plainSentences"; a line can override with "he_tts".
 // usage: node scripts/gen-voice.mjs <outDir> [lineId ...]
 import fs from 'node:fs';
 import path from 'node:path';
@@ -12,11 +12,11 @@ const [outDir = path.join(ROOT, 'review/voice-r2'), ...only] = process.argv.slic
 /** Remove Hebrew points and cantillation marks, keep letters and punctuation (maqaf becomes a space). */
 export const stripNikud = (s) => s.replace(/[֑-ׇֽֿׁׂׅׄ]/g, '').replace(/־/g, ' ');
 
-/** Hebrew text for the TTS: Nikud kept, except words the reviewer found read correctly only without it. */
+/** Hebrew text for the TTS: Nikud kept, except the exact sentences the reviewer chose to send without it. */
 const ttsHebrew = (he) => {
   if (cfg.hebrewText === 'plain') return stripNikud(he);
   let out = he;
-  for (const [withNikud, plain] of Object.entries(cfg.plainWords ?? {})) out = out.split(withNikud).join(plain);
+  for (const [withNikud, plain] of Object.entries(cfg.plainSentences ?? {})) out = out.split(withNikud).join(plain);
   return out;
 };
 

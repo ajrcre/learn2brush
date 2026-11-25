@@ -177,27 +177,27 @@
       "approvedAt": "2026-11-25T21:09:18.965608+00:00"
     },
     "vline:he:welcome": {
-      "status": "approved",
+      "status": "redo",
       "choice": "v1",
       "source": "review/voice-r2/he/welcome.mp3",
       "output": "public/audio/he/welcome.mp3",
-      "note": "",
+      "note": "recorded without Nikud by mistake; re-record with Nikud",
       "approvedAt": "2026-11-25T21:09:18.965608+00:00"
     },
     "vline:he:paste_instruct": {
-      "status": "approved",
+      "status": "redo",
       "choice": "v1",
       "source": "review/voice-r2/he/paste_instruct.mp3",
       "output": "public/audio/he/paste_instruct.mp3",
-      "note": "",
+      "note": "recorded without Nikud by mistake; re-record with Nikud",
       "approvedAt": "2026-11-25T21:09:18.965608+00:00"
     },
     "vline:he:paste_good": {
-      "status": "approved",
+      "status": "redo",
       "choice": "v1",
       "source": "review/voice-r2/he/paste_good.mp3",
       "output": "public/audio/he/paste_good.mp3",
-      "note": "",
+      "note": "recorded without Nikud by mistake; re-record with Nikud",
       "approvedAt": "2026-11-25T21:09:18.965608+00:00"
     },
     "vline:he:praise_1": {

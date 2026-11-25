@@ -2,13 +2,16 @@
   "name": "jessica",
   "voiceId": "cgSgspJ2msm6clMCkdW9",
   "model": "eleven_v3",
-  "settings": { "stability": 0.5, "similarity_boost": 0.8, "style": 0.3 },
-  "hebrewText": "nikud",
-  "plainWords": {
-    "כֹּל הַכָּבוֹד": "כל הכבוד",
-    "הַכָּבוֹד": "הכבוד",
-    "מְצַחְצְחִים": "מצחצחים",
-    "לִשְׁכֹּחַ": "לשכוח"
+  "settings": {
+    "stability": 0.5,
+    "similarity_boost": 0.8,
+    "style": 0.3
   },
-  "_note": "Reviewer's rule: Hebrew goes to the TTS WITH Nikud, except the words in plainWords, which the pronunciation lab showed read correctly only without Nikud. Per-line overrides: \"he_tts\" in src/i18n/voice.json."
+  "hebrewText": "nikud",
+  "_note": "Reviewer's rule: Hebrew goes to the TTS WITH Nikud. Only these exact sentences are sent without Nikud (wherever the whole sentence appears in a line). Per-line overrides: \"he_tts\" in src/i18n/voice.json.",
+  "plainSentences": {
+    "כֹּל הַכָּבוֹד!": "כל הכבוד!",
+    "קָדִימָה, מְצַחְצְחִים!": "קדימה, מצחצחים!",
+    "לֹא לִשְׁכֹּחַ אֶת הַצַּד הַפְּנִימִי!": "לא לשכוח את הצד הפנימי!"
+  }
 }
