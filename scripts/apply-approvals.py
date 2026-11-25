@@ -10,6 +10,7 @@ Input: a JSON file with the review page's `decisions` documents
   img:og_image     review/images/og_image_<choice>.jpg    -> public/img/og.jpg (1200x630 cover crop)
   img:app_icon     review/images/app_icon_<choice>.jpg    -> public/icons/icon-source.png (corners trimmed),
                    then run scripts/rasterize-icons.cjs on it
+  vline:<lang>:<id>  review/voice-r2/<lang>/<id>.mp3 -> public/audio/<lang>/<id>.mp3
   voice      records the chosen voice in assets/voice.json (lines are generated in round 2)
 
 Every applied item is recorded in assets/manifest.json with status "approved".
@@ -71,6 +72,13 @@ def main(path: str):
             dst = ROOT / 'assets' / 'icon-source.png'
             im.save(dst)
             subprocess.run(['node', str(ROOT / 'scripts' / 'rasterize-icons.cjs'), str(dst)], check=True)
+        elif kind == 'vline':
+            # narrator line: vline:<lang>:<lineId>
+            lang, _, line_id = ident.partition(':')
+            src = REVIEW / 'voice-r2' / lang / f'{line_id}.mp3'
+            dst = ROOT / 'public' / 'audio' / lang / f'{line_id}.mp3'
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(src, dst)
         elif item == 'voice':
             dst = ROOT / 'assets' / 'voice.json'
             dst.write_text(json.dumps({'name': choice, 'voiceId': VOICE_IDS[choice], 'model': 'eleven_v3'}, indent=2) + '\n')
