@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import type { HumanJaws, Tooth } from './jaws/HumanJaws';
-import { rng } from './jaws/toothGeometry';
+import type { Jaws, Tooth } from './jaws/Jaws';
+import { FLAT_TOP, rng } from './jaws/toothGeometry';
 
 type Kind = 'crumb' | 'spinach' | 'seed' | 'popcorn' | 'chocolate';
 
@@ -80,7 +80,7 @@ export class FoodBits {
   get remaining() { return this.bits.filter(b => !b.falling).length; }
   get total() { return this.bits.length; }
 
-  reset(jaws: HumanJaws, seed: number, count = 7) {
+  reset(jaws: Jaws, seed: number, count = 7) {
     for (const b of this.bits) b.mesh.removeFromParent();
     this.bits = [];
     const r = rng(seed);
@@ -99,7 +99,7 @@ export class FoodBits {
       const { w, t, h, kind: tk } = tooth.spec;
       const local = new THREE.Vector3();
       const localN = new THREE.Vector3();
-      const onTop = tk === 'molar' && (kind === 'seed' || kind === 'popcorn' || kind === 'crumb' || r() < 0.4);
+      const onTop = FLAT_TOP.includes(tk) && (kind === 'seed' || kind === 'popcorn' || kind === 'crumb' || r() < 0.4);
       if (onTop) {
         local.set((r() - 0.5) * w * 0.3, h * 0.92, (r() - 0.5) * t * 0.2);
         localN.set(0, 1, 0);

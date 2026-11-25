@@ -4,7 +4,7 @@ import { useStore } from '../state/store';
 import { CATALOG, isVisible, type Category, type Item } from '../config/economy';
 import { useT } from '../i18n/ui';
 import { audio, haptic } from '../audio/audio';
-import { looks } from './looks';
+import { jawFor, looks } from './looks';
 
 const TABS: { cat: Category; icon: string; key: 'jaw' | 'brushType' | 'shape' | 'handle' | 'bristles' | 'paste' }[] = [
   { cat: 'handle', icon: '🎨', key: 'handle' },
@@ -75,11 +75,14 @@ export function Customizer({ game, mode, top }: { game: Game; mode: 'choose' | '
     setIndex(equippedIndex);
     requestAnimationFrame(() => scrollToIndex(equippedIndex, false));
     game.setShowcasePaste(tab === 'paste');
+    if (tab !== 'jaw') { game.setShowcaseJaw(null); game.setJaw(jawFor(useStore.getState().profile)); }
   }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // the centred item: put it on (owned) or try it on (locked)
   useEffect(() => {
     if (!current) return;
+    // teeth tab: show the jaws themselves (an animal that's coming soon has no model yet)
+    if (current.cat === 'jaw') game.setShowcaseJaw(current.comingSoon ? null : current.id);
     if (owns(current.id) && !current.comingSoon) {
       if (profile.equipped[current.cat] !== current.id) equip(current.cat, current.id);
       const l = looks(useStore.getState().profile, { [current.cat]: current.id });
@@ -95,6 +98,8 @@ export function Customizer({ game, mode, top }: { game: Game; mode: 'choose' | '
     const l = looks(useStore.getState().profile);
     game.setBrushLook(l.brush); game.setPasteLook(l.paste);
     game.setShowcasePaste(false);
+    game.setShowcaseJaw(null);
+    game.setJaw(jawFor(useStore.getState().profile));
   }, [game]);
 
   const onScroll = () => {

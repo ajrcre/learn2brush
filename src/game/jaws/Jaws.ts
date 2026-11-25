@@ -1,23 +1,12 @@
 import * as THREE from 'three';
-import { buildToothGeometry, rng, SIDE_CHEWING, SIDE_INNER, SIDE_NONE, SIDE_OUTER, type ToothSpec } from './toothGeometry';
+import { buildToothGeometry, rng, SIDE_CHEWING, SIDE_INNER, SIDE_NONE, SIDE_OUTER, type ToothKind, type ToothSpec } from './toothGeometry';
 import { createEnamelMaterial, createGumMaterial } from '../materials';
+import { speciesFor, type Species } from './species';
 
-/** Primary (baby) dentition, half-arch from midline to back. mm. */
-const UPPER: ToothSpec[] = [
-  { kind: 'incisor', w: 6.5, t: 5.0, h: 6.0 },
-  { kind: 'incisor', w: 5.1, t: 4.0, h: 5.6 },
-  { kind: 'canine', w: 7.0, t: 6.0, h: 6.6 },
-  { kind: 'molar', w: 7.3, t: 8.5, h: 5.1 },
-  { kind: 'molar', w: 8.2, t: 9.5, h: 5.7 },
-];
-const LOWER: ToothSpec[] = [
-  { kind: 'incisor', w: 4.2, t: 3.8, h: 5.0 },
-  { kind: 'incisor', w: 4.6, t: 4.0, h: 5.2 },
-  { kind: 'canine', w: 5.2, t: 4.8, h: 6.0 },
-  { kind: 'molar', w: 7.7, t: 7.0, h: 5.5 },
-  { kind: 'molar', w: 9.9, t: 8.7, h: 5.5 },
-];
-const GAP = 0.55; // primary dentition has natural spacing
+/** how strongly the biting edge looks translucent */
+const INCISAL: Partial<Record<ToothKind, number>> = { incisor: 1, canine: 0.6, fang: 0.7, cone: 0.6, blade: 0.8 };
+/** natural lean: front teeth tip outwards, cheek teeth slightly in */
+const FLARE: Record<ToothKind, number> = { incisor: 0.2, canine: 0.12, molar: -0.04, fang: 0.06, cone: 0.1, blade: 0.04, carnassial: -0.02, grinder: -0.05 };
 
 export interface Tooth {
   index: number;
@@ -36,78 +25,89 @@ export interface Tooth {
 
 export interface SideProgress { outer: number; inner: number; chewing: number; done: boolean }
 
-const ARCH_POINTS = [
-  [-20, -14], [-19, -6], [-16.6, 1.5], [-12.2, 7.6], [-6.6, 11.3], [0, 12.6],
-  [6.6, 11.3], [12.2, 7.6], [16.6, 1.5], [19, -6], [20, -14],
-];
-
-function makeArch(totalLen: number, widen: number) {
-  const pts = ARCH_POINTS.map(([x, z]) => new THREE.Vector3(x * widen, 0, z));
+function makeArch(points: [number, number][], totalLen: number, widen: number, zShift: number) {
+  const pts = points.map(([x, z]) => new THREE.Vector3(x * widen, 0, z));
   const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
   const scale = totalLen / curve.getLength();
-  const scaled = new THREE.CatmullRomCurve3(pts.map(p => p.clone().multiplyScalar(scale)), false, 'centripetal');
+  const scaled = new THREE.CatmullRomCurve3(pts.map(p => p.clone().multiplyScalar(scale).add(new THREE.Vector3(0, 0, zShift))), false, 'centripetal');
   scaled.arcLengthDivisions = 800;
   return scaled;
 }
 
-export class HumanJaws {
+/** Outward (cheek/lip side) direction at a point of the arch. The arch runs right back → front → left back. */
+function outward(tan: THREE.Vector3) {
+  return new THREE.Vector3(-tan.z, 0, tan.x).normalize();
+}
+
+/** A full set of upper and lower teeth with gums, built from a species description. */
+export class Jaws {
   readonly root = new THREE.Group();
   readonly upper = new THREE.Group();
   readonly lower = new THREE.Group();
   readonly teeth: Tooth[] = [];
   readonly gums: THREE.Mesh[] = [];
   readonly toothMeshes: THREE.Mesh[] = [];
-  readonly gumMat = createGumMaterial();
-  /** Arch centre z offset used for "outward" direction (in jaw local space). */
-  readonly archCenter = new THREE.Vector3(0, 0, -4);
+  readonly species: Species;
+  readonly gumMat: THREE.MeshPhysicalMaterial;
 
-  constructor(seed = 7) {
+  constructor(speciesId = 'jaw_human', seed = 7) {
+    this.species = speciesFor(speciesId);
+    this.gumMat = createGumMaterial(this.species.gum);
     this.root.add(this.upper, this.lower);
-    this.buildJaw('upper', UPPER, seed);
-    this.buildJaw('lower', LOWER, seed + 101);
-    this.upper.position.y = 6.5;
-    this.lower.position.y = -6.5;
+    this.buildJaw('upper', this.species.upper, seed);
+    this.buildJaw('lower', this.species.lower, seed + 101);
+    this.upper.position.y = this.species.open;
+    this.lower.position.y = -this.species.open;
+    this.root.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(this.root);
+    this.depth = box.max.z - box.min.z;
   }
 
+  /** front-to-back size of the arch (mm), for framing the top and bottom views */
+  readonly depth: number;
+
+  get id() { return this.species.id; }
+
   private buildJaw(which: 'upper' | 'lower', half: ToothSpec[], seed: number) {
+    const sp = this.species;
     const group = which === 'upper' ? this.upper : this.lower;
     const up = which === 'upper' ? -1 : 1; // crown direction
     // full arch order: patient's right back → midline → left back
     const order: ToothSpec[] = [...half.slice().reverse(), ...half];
     const widths = order.map(s => s.w);
-    const total = widths.reduce((a, b) => a + b, 0) + GAP * (order.length - 1);
-    const curve = makeArch(total, which === 'upper' ? 1.0 : 0.94);
+    const total = widths.reduce((a, b) => a + b, 0) + sp.gap * (order.length - 1);
+    const curve = makeArch(sp.arch, total, which === 'upper' ? 1.0 : sp.lowerWiden, sp.zShift);
     const L = curve.getLength();
     const centers: number[] = [];
     let s = 0;
     for (let i = 0; i < order.length; i++) {
       centers.push(s + widths[i] / 2);
-      s += widths[i] + GAP;
+      s += widths[i] + sp.gap;
     }
 
     const rand = rng(seed);
     order.forEach((spec, i) => {
+      if (spec.gap) return;
       const u = centers[i] / L;
       const p = curve.getPointAt(u);
-      const tan = curve.getTangentAt(u);
-      let n = new THREE.Vector3(tan.z, 0, -tan.x).normalize();
-      if (n.dot(p.clone().sub(this.archCenter)) < 0) n.negate();
+      const n = outward(curve.getTangentAt(u));
       const yAxis = new THREE.Vector3(0, up, 0);
       const xAxis = new THREE.Vector3().crossVectors(yAxis, n).normalize();
       const basis = new THREE.Matrix4().makeBasis(xAxis, yAxis, n);
       const { geometry, sides } = buildToothGeometry(spec, seed * 31 + i * 7 + 1);
-      const mat = createEnamelMaterial(spec.kind === 'incisor' ? 1 : spec.kind === 'canine' ? 0.6 : 0.2);
+      const mat = createEnamelMaterial(INCISAL[spec.kind] ?? 0.2, sp.enamel);
       const mesh = new THREE.Mesh(geometry, mat);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       mesh.matrixAutoUpdate = false;
       // flare: incisors lean outward, molars slightly inward
-      const flare = spec.kind === 'incisor' ? 0.2 : spec.kind === 'canine' ? 0.12 : -0.04;
+      const flare = FLARE[spec.kind] + (spec.lean ?? 0);
       const tilt = new THREE.Matrix4().makeRotationX(flare + (rand() - 0.5) * 0.04);
       const twist = new THREE.Matrix4().makeRotationY((rand() - 0.5) * 0.08);
       mesh.matrix.copy(new THREE.Matrix4().makeTranslation(p.x, 0, p.z).multiply(basis).multiply(tilt).multiply(twist));
       mesh.matrixWorldNeedsUpdate = true;
       group.add(mesh);
+      if (sp.spareRow) group.add(this.spareTooth(spec, mesh.matrix, mat, seed * 13 + i));
       const vc = geometry.getAttribute('position').count;
       const tooth: Tooth = {
         index: this.teeth.length,
@@ -132,15 +132,37 @@ export class HumanJaws {
     this.gums.push(gum);
   }
 
+  /** A smaller replacement tooth lying folded back inside the gum, behind a front tooth (just for show). */
+  private spareTooth(spec: ToothSpec, front: THREE.Matrix4, mat: THREE.Material, seed: number) {
+    const { geometry } = buildToothGeometry({ ...spec, w: spec.w * 0.78, h: spec.h * 0.72 }, seed);
+    const m = new THREE.Mesh(geometry, mat);
+    m.matrixAutoUpdate = false;
+    m.castShadow = true;
+    m.receiveShadow = true;
+    m.matrix.copy(front).multiply(new THREE.Matrix4().makeTranslation(0, -1.2, -spec.t / 2 - 2.6)).multiply(new THREE.Matrix4().makeRotationX(-1.15));
+    m.userData.spare = true;
+    return m;
+  }
+
+  /** Free GPU memory when the jaws are swapped for another animal. */
+  dispose() {
+    this.root.traverse(o => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      m.geometry.dispose();
+      (m.material as THREE.Material).dispose();
+    });
+    this.root.removeFromParent();
+  }
+
   private buildGum(curve: THREE.CatmullRomCurve3, order: ToothSpec[], centers: number[], up: number) {
     const L = curve.getLength();
     const extra = 5.5;
     const S = 420, P = 44;
-    const bottom = -6.5;
+    const bottom = -this.species.gumDepth;
+    const gapW = this.species.gap;
     const pos = new Float32Array((S + 1) * P * 3 + 6);
     const gumT = new Float32Array((S + 1) * P + 2);
-    const tmp = new THREE.Vector3();
-
     const nearestThickness = (s: number) => {
       // interpolate neck thickness between neighbouring teeth
       let best = 0, bestD = 1e9;
@@ -158,12 +180,20 @@ export class HumanJaws {
       // gum margin is low at the tooth centre, high between teeth (papilla)
       let d = 1e9;
       let base = 0.45;
+      let pad = 0;
       for (let i = 0; i < centers.length; i++) {
         const half = order[i].w / 2;
-        d = Math.min(d, Math.abs(Math.abs(s - centers[i]) - half - GAP / 2));
-        if (Math.abs(s - centers[i]) < half) base = order[i].kind === 'molar' ? 0.35 : 0.5;
+        const inside = Math.abs(s - centers[i]) < half;
+        if (order[i].gap) {
+          // toothless stretch: low smooth gum, or a raised pad (goat) that blends into its neighbours
+          if (inside) base = 0.3;
+          if (order[i].pad) pad = Math.max(pad, order[i].pad! * (1 - THREE.MathUtils.smoothstep(Math.abs(s - centers[i]), half - 2, half + 2)));
+          continue;
+        }
+        d = Math.min(d, Math.abs(Math.abs(s - centers[i]) - half - gapW / 2));
+        if (inside) base = order[i].kind === 'molar' || order[i].kind === 'grinder' ? 0.35 : 0.5;
       }
-      return base + 1.7 * Math.exp(-((d / 1.15) ** 2));
+      return Math.max(base, pad) + 1.7 * Math.exp(-((d / 1.15) ** 2));
     };
 
     let vi = 0;
@@ -176,12 +206,11 @@ export class HumanJaws {
       // extend straight beyond the ends
       if (sArc < 0) p.addScaledVector(tan, sArc);
       if (sArc > L) p.addScaledVector(tan, sArc - L);
-      let n = new THREE.Vector3(tan.z, 0, -tan.x).normalize();
-      if (n.dot(tmp.copy(p).sub(this.archCenter)) < 0) n.negate();
+      const n = outward(tan);
       // end rounding
       const over = sArc < 0 ? -sArc / extra : sArc > L ? (sArc - L) / extra : 0;
       const endScale = Math.sqrt(Math.max(0, 1 - over * over));
-      const halfW = (nearestThickness(sc) / 2 + 1.1) * Math.max(endScale, 0.0001);
+      const halfW = (nearestThickness(sc) / 2 + this.species.gumWidth) * Math.max(endScale, 0.0001);
       const top = crest(sc);
       const yc = (top + bottom) / 2;
       const hh = ((top - bottom) / 2) * Math.max(endScale, 0.0001);

@@ -5,14 +5,38 @@ import * as THREE from 'three';
  * Local frame: +y = towards the biting edge (crown), +z = outer (cheek/lip) side, +x = along the arch.
  * y = 0 is the neck (cemento-enamel junction); the root continues below and is hidden in the gum.
  */
-export type ToothKind = 'incisor' | 'canine' | 'molar';
+export type ToothKind =
+  | 'incisor' | 'canine' | 'molar'
+  /** long curved fang (lion) */
+  | 'fang'
+  /** round peg that tapers to a blunt point (alligator) */
+  | 'cone'
+  /** flat serrated triangle (shark) */
+  | 'blade'
+  /** thin scissor tooth with three cusps (lion cheek teeth) */
+  | 'carnassial'
+  /** tall flat-topped grinding tooth with enamel ridges (goat cheek teeth) */
+  | 'grinder';
 
 export interface ToothSpec {
   kind: ToothKind;
   w: number; // crown width along arch
   t: number; // crown thickness (outer↔inner)
   h: number; // crown height above neck
+  /** tip bends back towards the inside by this many mm (fangs, cones) */
+  curve?: number;
+  /** extra outward lean in radians */
+  lean?: number;
+  /** no tooth here: just keep the room (gap between teeth, or the goat's toothless pad) */
+  gap?: boolean;
+  /** gap only: how high the gum rises there (the goat's dental pad) */
+  pad?: number;
 }
+
+/** Pointed teeth have no flat chewing surface: their tip counts as the "chewing side". */
+export const POINTY: ToothKind[] = ['fang', 'cone', 'blade'];
+/** Teeth with a flat-ish top where food can sit. */
+export const FLAT_TOP: ToothKind[] = ['molar', 'grinder'];
 
 export const SIDE_OUTER = 0;
 export const SIDE_INNER = 1;
@@ -66,15 +90,65 @@ function profile(kind: ToothKind, q: number, rootDepthQ: number): [number, numbe
       const sz = (0.8 + 0.2 * bulge) * (1 - 0.1 * smooth(0.45, 1, q));
       return [sx, sz, 3.0];
     }
+    case 'fang': {
+      const taper = Math.pow(smooth(0.1, 1.0, q), 0.85);
+      const sx = (0.8 + 0.2 * bulge) * (1 - 0.8 * taper);
+      const sz = (0.8 + 0.2 * bulge) * (1 - 0.74 * taper);
+      return [sx, sz, 2.15];
+    }
+    case 'cone': {
+      const taper = smooth(0.0, 1.0, q);
+      const sx = (0.82 + 0.18 * bulge) * (1 - 0.55 * taper);
+      const sz = (0.82 + 0.18 * bulge) * (1 - 0.55 * taper);
+      return [sx, sz, 2.0];
+    }
+    case 'blade': {
+      // wide base lobes, then straight edges up to the point
+      const sx = (0.86 + 0.14 * bulge) * (1 - 0.88 * Math.pow(Math.max(0, q - 0.08) / 0.92, 0.95));
+      const sz = (0.8 + 0.2 * bulge) * (1 - 0.55 * smooth(0.2, 1, q));
+      return [sx, sz, 2.0];
+    }
+    case 'carnassial': {
+      const sx = (0.8 + 0.2 * bulge) * (1 - 0.08 * smooth(0.5, 1, q));
+      const sz = (0.8 + 0.2 * bulge) * (1 - 0.35 * smooth(0.3, 1, q));
+      return [sx, sz, 2.4];
+    }
+    case 'grinder': {
+      const sx = 0.86 + 0.14 * bulge;
+      const sz = 0.84 + 0.16 * bulge;
+      return [sx, sz, 3.6];
+    }
   }
 }
 
 function capHeight(kind: ToothKind, h: number) {
-  return kind === 'canine' ? 0.42 * h : kind === 'incisor' ? 0.14 * h : 0.2 * h;
+  switch (kind) {
+    case 'canine': return 0.42 * h;
+    case 'incisor': return 0.14 * h;
+    case 'fang': return 0.3 * h;
+    case 'cone': return 0.32 * h;
+    case 'blade': return 0.22 * h;
+    case 'carnassial': return 0.16 * h;
+    case 'grinder': return 0.1 * h;
+    default: return 0.2 * h;
+  }
 }
+
+/** Pointed caps (canine-style) rather than domed ones. */
+const POINTED_CAP: ToothKind[] = ['canine', 'fang', 'cone', 'blade'];
 
 /** Occlusal relief for molars: cusps with a central fissure. u,w ∈ [-1,1]. */
 function cuspField(kind: ToothKind, u: number, w: number, rand: () => number, cusps: number[][]) {
+  if (kind === 'carnassial') {
+    // a tall middle cusp with a smaller one on each side, like scissor blades
+    return 1.0 * Math.exp(-(u * u) / 0.09) + 0.5 * Math.exp(-((u - 0.62) ** 2) / 0.05) + 0.45 * Math.exp(-((u + 0.62) ** 2) / 0.05) - 0.25;
+  }
+  if (kind === 'grinder') {
+    // two crescent-shaped enamel ridges (outer and inner) with a valley between
+    const crescent = 0.12 * Math.cos(u * Math.PI);
+    const ridge = (c: number) => Math.exp(-((w - c - crescent * Math.sign(c)) ** 2) / 0.02);
+    return 0.8 * (ridge(0.55) + ridge(-0.55)) * (0.8 + 0.2 * Math.abs(Math.sin(u * Math.PI))) - 0.35 * Math.exp(-(w * w) / 0.06);
+  }
   if (kind !== 'molar') return 0;
   let f = 0;
   for (const [cu, cw, a] of cusps) {
@@ -97,7 +171,8 @@ export interface ToothGeometryResult {
 export function buildToothGeometry(spec: ToothSpec, seed: number): ToothGeometryResult {
   const rand = rng(seed);
   const { kind, w, t, h } = spec;
-  const root = h * 0.9;
+  // the root stays inside the gum, however tall the crown
+  const root = Math.min(h * 0.9, 6);
   const capH = capHeight(kind, h);
   const yTop = h - capH;
   const rootQ = root / h;
@@ -153,12 +228,12 @@ export function buildToothGeometry(spec: ToothSpec, seed: number): ToothGeometry
   // cap rings
   const lastHx = Math.max(...ringEdge.map(e => Math.abs(e[0])));
   const lastHz = Math.max(...ringEdge.map(e => Math.abs(e[1])));
-  const cuspAmp = kind === 'molar' ? h * 0.16 : 0;
+  const cuspAmp = kind === 'molar' ? h * 0.16 : kind === 'carnassial' ? h * 0.32 : kind === 'grinder' ? h * 0.07 : 0;
   for (let j = 1; j <= V_CAP; j++) {
     const s = j / V_CAP;
     const r = Math.cos(s * Math.PI * 0.5);
     let yBase: number;
-    if (kind === 'canine') yBase = yTop + capH * (1 - Math.pow(r, 1.35));
+    if (POINTED_CAP.includes(kind)) yBase = yTop + capH * (1 - Math.pow(r, kind === 'canine' ? 1.35 : kind === 'cone' ? 1.6 : 1.15));
     else yBase = yTop + capH * Math.sin(s * Math.PI * 0.5);
     for (let i = 0; i < U; i++) {
       const [ex, ez] = ringEdge[i];
@@ -169,7 +244,7 @@ export function buildToothGeometry(spec: ToothSpec, seed: number): ToothGeometry
       put(x, y, z);
     }
   }
-  const topY = kind === 'molar' ? h - capH * 0.4 : h;
+  const topY = kind === 'molar' ? h - capH * 0.4 : pos[(vi - 1) * 3 + 1];
   put(0, topY, 0); // apex top
   put(0, -root - 0.4, 0); // apex bottom
 
@@ -190,6 +265,23 @@ export function buildToothGeometry(spec: ToothSpec, seed: number): ToothGeometry
   for (let i = 0; i < U; i++) idx.push(lastRing + i, apexTop, lastRing + ((i + 1) % U));
   for (let i = 0; i < U; i++) idx.push(i, (i + 1) % U, apexBottom);
 
+  // shark teeth: fine serrations along the cutting edges
+  if (kind === 'blade') {
+    for (let k = 0; k < vi; k++) {
+      const x = pos[k * 3], y = pos[k * 3 + 1];
+      if (y <= 0) continue;
+      const edge = smooth(0.55, 0.95, Math.abs(x) / Math.max(0.01, (w / 2) * profile(kind, y / h, rootQ)[0]));
+      pos[k * 3] += Math.sign(x) * edge * 0.14 * Math.max(0, Math.sin(y * 5.2));
+    }
+  }
+  // fangs and cones bend backwards (towards the inside of the mouth) near the tip
+  if (spec.curve) {
+    for (let k = 0; k < vi; k++) {
+      const q = pos[k * 3 + 1] / h;
+      if (q > 0) pos[k * 3 + 2] -= spec.curve * q * q;
+    }
+  }
+
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   g.setAttribute('crownT', new THREE.BufferAttribute(crownT, 1));
@@ -198,13 +290,18 @@ export function buildToothGeometry(spec: ToothSpec, seed: number): ToothGeometry
 
   // classify sides
   const nrm = g.getAttribute('normal') as THREE.BufferAttribute;
+  // a sharp tip can end up with a zero normal (all its triangles are slivers), which turns into NaN on screen
+  for (const [k, y] of [[apexTop, 1], [apexBottom, -1]]) {
+    if (Math.hypot(nrm.getX(k), nrm.getY(k), nrm.getZ(k)) < 0.5) nrm.setXYZ(k, 0, y, 0);
+  }
   const sides = new Uint8Array(vertCount);
-  const chewStart = kind === 'molar' ? 0.62 : kind === 'canine' ? 0.8 : 0.86;
+  const chewStart = ({ molar: 0.62, canine: 0.8, incisor: 0.86, fang: 0.8, cone: 0.78, blade: 0.76, carnassial: 0.62, grinder: 0.8 } as Record<ToothKind, number>)[kind];
+  const pointy = POINTY.includes(kind);
   for (let k = 0; k < vertCount; k++) {
     const y = pos[k * 3 + 1];
     const ny = nrm.getY(k), nz = nrm.getZ(k);
     if (y < 0.15) sides[k] = SIDE_NONE;
-    else if (y > h * chewStart && ny > 0.45) sides[k] = SIDE_CHEWING;
+    else if (y > h * chewStart && (pointy || ny > (kind === 'carnassial' ? 0.3 : 0.45))) sides[k] = SIDE_CHEWING;
     else sides[k] = nz >= 0 ? SIDE_OUTER : SIDE_INNER;
   }
   g.setAttribute('dirt', new THREE.BufferAttribute(new Float32Array(vertCount), 1));
