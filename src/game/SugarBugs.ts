@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { HumanJaws, Tooth } from './jaws/HumanJaws';
+import type { Jaws, Tooth } from './jaws/Jaws';
 import { rng, SIDE_NONE } from './jaws/toothGeometry';
 
 const COLORS = ['#7ad83b', '#b45cf0', '#2fc4b2', '#ff7a3d'];
@@ -80,7 +80,7 @@ export class SugarBugs {
   /** Live bugs, for helper-arrow hints. */
   live() { return this.bugs.filter(b => b.alive); }
 
-  reset(jaws: HumanJaws, seed: number, count = 6) {
+  reset(jaws: Jaws, seed: number, count = 6) {
     for (const b of this.bugs) b.group.removeFromParent();
     this.bugs = [];
     const r = rng(seed);

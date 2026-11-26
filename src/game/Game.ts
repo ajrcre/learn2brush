@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Stage, detectQuality } from './Stage';
-import { HumanJaws, type SideProgress } from './jaws/HumanJaws';
+import { Jaws, type SideProgress } from './jaws/Jaws';
 import { SIDE_CHEWING, SIDE_INNER, SIDE_OUTER } from './jaws/toothGeometry';
 import { Brush, type BrushLook } from './Brush';
 import { Paste, createTube, type PasteLook } from './Paste';
@@ -37,7 +37,7 @@ const damp = (a: number, b: number, k: number, dt: number) => THREE.MathUtils.le
 
 export class Game {
   readonly stage: Stage;
-  readonly jaws = new HumanJaws();
+  jaws = new Jaws();
   readonly brush: Brush;
   readonly paste: Paste;
   readonly foam = new Foam();
@@ -131,6 +131,32 @@ export class Game {
     for (const fn of (this.handlers[k] ?? []) as ((...a: unknown[]) => void)[]) fn(...args);
   }
 
+  /** Swap in another animal's teeth (between rounds). */
+  setJaw(id: string) {
+    if (this.jaws.id === id) return;
+    const old = this.jaws;
+    this.food.reset(old, 0, 0);
+    this.bugs.reset(old, 0, 0);
+    this.foam.clear();
+    this.clearHints();
+    old.dispose();
+    this.jaws = new Jaws(id);
+    this.content.add(this.jaws.root);
+    this.jaws.resetDirt(1);
+    for (const t of this.jaws.teeth) { t.dirt.fill(0); (t.mesh.geometry.getAttribute('dirt') as THREE.BufferAttribute).needsUpdate = true; }
+    this.doneCount = 0;
+    this.setView(this.view);
+    this.updateModel(100);
+  }
+
+  /** In the customiser's teeth tab, show the jaws instead of the brush. */
+  private showcaseJaw = false;
+  setShowcaseJaw(id: string | null) {
+    this.showcaseJaw = !!id;
+    if (id) this.setJaw(id);
+    this.syncVisibility();
+  }
+
   setBrushLook(look: BrushLook) { this.brush.setLook(look); this.brush.pasteAnchor.add(this.paste.mesh); }
   setPasteLook(look: PasteLook) {
     this.paste.setLook(look);
@@ -141,9 +167,7 @@ export class Game {
 
   setPhase(p: Phase) {
     this.phase = p;
-    const showJaws = p === 'home' || p === 'brush' || p === 'spit' || p === 'done';
-    this.model.visible = showJaws;
-    this.brush.group.visible = p !== 'home' && p !== 'done' && p !== 'spit';
+    this.syncVisibility();
     this.tube.group.visible = p === 'paste';
     this.paste.mesh.visible = p === 'paste';
     if (p === 'customize') this.setShowcasePaste(false);
@@ -155,6 +179,13 @@ export class Game {
     if (p === 'brush') this.startBrushing();
     if (p === 'spit') { this.spitT = 0; this.mode = 'none'; this.contact = false; this.bugs.clear(); }
     if (p === 'home' || p === 'done') this.setView('front');
+  }
+
+  private syncVisibility() {
+    const p = this.phase;
+    const jawShowcase = p === 'customize' && this.showcaseJaw;
+    this.model.visible = p === 'home' || p === 'brush' || p === 'spit' || p === 'done' || jawShowcase;
+    this.brush.group.visible = p !== 'home' && p !== 'done' && p !== 'spit' && !jawShowcase;
   }
 
   /** In the customiser, show a blob of paste on the brush so the colour can be previewed. */
@@ -177,7 +208,6 @@ export class Game {
     this.doneCount = 0;
     this.brushingTime = 0;
     this.setView('front');
-    this.yawT = 0; this.pitchT = 0.12;
     this.idle = 0;
     this.clearHints();
     this.pushProgress();
@@ -185,7 +215,7 @@ export class Game {
 
   setView(v: View) {
     this.view = v;
-    if (v === 'front') { this.yawT = 0; this.pitchT = 0.12; }
+    if (v === 'front') { this.yawT = this.jaws.species.frontYaw; this.pitchT = 0.12; }
     if (v === 'upper') { this.yawT = 0; this.pitchT = -1.05; }
     if (v === 'lower') { this.yawT = 0; this.pitchT = 1.05; }
   }
@@ -247,10 +277,10 @@ export class Game {
   /** Raycast teeth / gums / food. */
   private pick(): boolean {
     this.ray.setFromCamera(this.ndc, this.stage.camera);
-    const targets: THREE.Object3D[] = [...this.jaws.toothMeshes.filter(m => m.parent!.visible), ...this.jaws.gums.filter(g => g.parent!.visible), ...this.food.meshes()];
+    const targets: THREE.Object3D[] = [...this.jaws.toothMeshes.filter(m => m.parent!.visible), ...this.jaws.gums.filter(g => g.parent!.visible), ...this.jaws.occluders.filter(o => o.parent!.visible), ...this.food.meshes()];
     const hits = this.ray.intersectObjects(targets, false);
     const h = hits[0];
-    if (!h || !h.face) return false;
+    if (!h || !h.face || h.object.userData.head) return false; // the head can't be brushed (drag turns it)
     this.hitPoint.copy(h.point);
     this.hitNormal.copy(h.face.normal).transformDirection(h.object.matrixWorld);
     if (this.hitNormal.dot(this.ray.ray.direction) > 0) this.hitNormal.negate();
@@ -300,7 +330,15 @@ export class Game {
 
     // ---- camera framing per phase ----
     const tanHalf = Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2);
-    if (this.phase === 'customize') {
+    const frame = this.jaws.species.frame;
+    if (this.phase === 'customize' && this.showcaseJaw) {
+      // jaws sit in the band between the category buttons and the carousel
+      const d = this.fitDistance(frame.w * (portrait ? 1.25 : 2.2), frame.h * (portrait ? 3.1 : 4.8));
+      const visH = 2 * d * tanHalf;
+      const lift = portrait ? 0.1 : 0.17;
+      this.camTarget.set(0, -visH * lift, 0);
+      this.camPos.set(0, -visH * lift, d);
+    } else if (this.phase === 'customize') {
       // brush shown in the upper part of the screen, above the selection panel
       // brush sits in the empty band between the category buttons and the carousel
       // frame the whole brush including shape parts on the end (star, flame, horn)
@@ -318,7 +356,9 @@ export class Game {
       this.camPos.set(2, 6 - visH * 0.1 + d * 0.55, d * 0.85);
     } else {
       const both = this.focusUpper > 0.5 && this.focusLower > 0.5;
-      const w = 54, h = both ? 44 : 40;
+      // seen from above/below, long snouts need room for their whole length
+      const topDown = this.phase === 'brush' && this.view !== 'front';
+      const w = frame.w, h = both ? frame.h : Math.max(frame.h - 4 - (frame.h - 44) * 0.5, topDown ? this.jaws.depth * 0.9 : 0);
       // reserve room for UI bars
       this.camTarget.set(0, portrait ? -2 : 0, 0);
       this.camPos.set(0, portrait ? -2 : 0, this.fitDistance(w * 1.12, h * (portrait ? 1.5 : 1.3)));
@@ -353,8 +393,8 @@ export class Game {
   }
 
   private updateModel(dt: number) {
-    if (this.phase === 'home' || this.phase === 'done' || this.phase === 'spit') {
-      if (this.mode !== 'rotate') { this.turntable += dt * 0.35; this.yawT = Math.sin(this.turntable) * 0.6; }
+    if (this.phase === 'home' || this.phase === 'done' || this.phase === 'spit' || (this.phase === 'customize' && this.showcaseJaw)) {
+      if (this.mode !== 'rotate') { this.turntable += dt * 0.35; this.yawT = this.jaws.species.frontYaw * 0.5 + Math.sin(this.turntable) * 0.6; }
     }
     this.yaw = damp(this.yaw, this.yawT, 8, dt);
     this.pitch = damp(this.pitch, this.pitchT, 8, dt);
@@ -363,11 +403,12 @@ export class Game {
     const fl = this.phase === 'brush' && this.view === 'upper' ? 0 : 1;
     this.focusUpper = damp(this.focusUpper, fu, 6, dt);
     this.focusLower = damp(this.focusLower, fl, 6, dt);
-    this.jaws.upper.position.y = 6.5 + (1 - this.focusUpper) * 80;
-    this.jaws.lower.position.y = -6.5 - (1 - this.focusLower) * 80;
+    const open = this.jaws.species.open;
+    this.jaws.upper.position.y = open + (1 - this.focusUpper) * 80;
+    this.jaws.lower.position.y = -open - (1 - this.focusLower) * 80;
     this.jaws.upper.visible = this.focusUpper > 0.05;
     this.jaws.lower.visible = this.focusLower > 0.05;
-    const cy = this.view === 'upper' && this.phase === 'brush' ? -6.5 : this.view === 'lower' && this.phase === 'brush' ? 6.5 : 0;
+    const cy = this.view === 'upper' && this.phase === 'brush' ? -open : this.view === 'lower' && this.phase === 'brush' ? open : 0;
     this.contentY = damp(this.contentY, cy, 6, dt);
     this.content.position.y = this.contentY;
     this.model.updateMatrixWorld(true);
@@ -430,7 +471,7 @@ export class Game {
       normal = new THREE.Vector3(-1, 0.2, 0.3).normalize();
     }
     // orientation: brush +Y = surface normal, handle (+X) points out of the mouth & towards the viewer
-    const archCenter = this.content.localToWorld(this.tmpV.set(0, 0, -6));
+    const archCenter = this.content.localToWorld(this.tmpV.set(...this.jaws.species.center));
     const out = target.clone().sub(archCenter);
     out.y *= 0.3;
     out.normalize().add(new THREE.Vector3(0.45, 0, 0.3));
@@ -557,7 +598,7 @@ export class Game {
   private visibleSpot(c: { mesh: THREE.Object3D; space: THREE.Object3D; spots: { p: THREE.Vector3; n: THREE.Vector3 }[] }) {
     const cam = this.stage.camera;
     if (!c.mesh.parent?.visible) return null;
-    const targets: THREE.Object3D[] = [...this.jaws.toothMeshes.filter(m => m.parent!.visible), ...this.jaws.gums.filter(g => g.parent!.visible), ...this.food.meshes()];
+    const targets: THREE.Object3D[] = [...this.jaws.toothMeshes.filter(m => m.parent!.visible), ...this.jaws.gums.filter(g => g.parent!.visible), ...this.jaws.occluders.filter(o => o.parent!.visible), ...this.food.meshes()];
     for (const local of c.spots) {
       const sp = { p: local.p.clone().applyMatrix4(c.space.matrixWorld), n: local.n.clone().transformDirection(c.space.matrixWorld) };
       const toCam = cam.position.clone().sub(sp.p).normalize();
@@ -716,7 +757,7 @@ export class Game {
       this.pitchT = THREE.MathUtils.clamp(this.pitchT + dp, -1.25, 1.25);
       this.updateModel(100);
       this.model.updateMatrixWorld(true);
-      const targets = [...this.jaws.toothMeshes.filter(m => m.parent!.visible), ...this.jaws.gums.filter(g => g.parent!.visible)];
+      const targets = [...this.jaws.toothMeshes.filter(m => m.parent!.visible), ...this.jaws.gums.filter(g => g.parent!.visible), ...this.jaws.occluders.filter(o => o.parent!.visible)];
       this.jaws.teeth.forEach((t, ti) => {
         if (!t.mesh.parent!.visible) return;
         const pos = t.mesh.geometry.getAttribute('position');

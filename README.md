@@ -14,7 +14,9 @@ Dev URL flags: `?unlockall` (review mode, everything unlocked), `?q=high|medium|
 Vite + TypeScript + React (UI only) + plain Three.js (scene) with `postprocessing` + N8AO, zustand, idb-keyval, vite-plugin-pwa.
 
 ## Code map
-- `src/game/jaws/` – code-built baby teeth (20) and gums; per-vertex plaque, side classification (outer/inner/chewing), cleaning.
+- `src/game/jaws/` – code-built teeth and gums; per-vertex plaque, side classification (outer/inner/chewing), cleaning.
+  `species.ts` describes each set of jaws (kid baby teeth, goat, lion, alligator, shark): tooth shapes per half arch, arch outline, gum/enamel colours, camera framing. `Jaws.ts` builds any of them; `toothGeometry.ts` has the tooth shapes (incisor, canine, molar, fang, cone, blade, carnassial, grinder).
+  `heads.ts` builds an animal head around the jaws (prototype: alligator). The head starts at the gum line and grows away from the teeth, so every tooth can still be brushed; head meshes block taps and arrows but are never cleaned.
 - `src/game/materials.ts` – enamel and gum shaders (wet clearcoat, fake translucency, plaque blend).
 - `src/game/Brush.ts`, `Paste.ts`, `Effects.ts` (foam, bubbles, sparkles), `Food.ts` (leftovers).
 - `src/game/Game.ts` – phases, camera, input, brushing logic, progress events.

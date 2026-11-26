@@ -1,4 +1,4 @@
-// Render every item (or a filtered set) on the 3D brush for the review page.
+// Render every item (or a filtered set) on the 3D brush for the review page. Jaws are rendered on their own, clean.
 // usage: node scripts/render-items.cjs <outDir> [idPrefixFilter] [--frames]
 const { chromium } = require('playwright');
 const fs = require('fs');
@@ -21,7 +21,7 @@ const fs = require('fs');
   // catalogue comes from the page bundle via the store's item list
   const list = await p.evaluate((filter) => {
     // the Customizer is unmounted (hidden); read catalogue from a global set below
-    return window.__catalog.filter(i => ['handle', 'shape', 'paste', 'bristles'].includes(i.cat) && i.id.startsWith(filter)).map(i => ({ id: i.id, cat: i.cat }));
+    return window.__catalog.filter(i => ['handle', 'shape', 'paste', 'bristles', 'jaw'].includes(i.cat) && i.id.startsWith(filter)).map(i => ({ id: i.id, cat: i.cat }));
   }, filter);
   const combos = [
     { id: 'combo_sword_flames', o: { shape: 'shape_sword', handle: 'handle_flames' } },
@@ -33,6 +33,16 @@ const fs = require('fs');
   ];
   const jobs = [...list.map(i => ({ id: i.id, o: { [i.cat]: i.id }, paste: i.cat === 'paste' })), ...(filter ? [] : combos.map(c => ({ ...c, paste: !!c.o.paste })))];
   for (const j of jobs) {
+    if (j.id.startsWith('jaw_')) {
+      // the teeth on their own, turning slowly; one shot from the front and one from the side
+      await p.evaluate((id) => { const g = window.__game; g.setPhase('home'); g.setJaw(id); }, j.id);
+      await p.waitForTimeout(1600);
+      await p.screenshot({ path: `${out}/${j.id}.jpg`, quality: 85 });
+      await p.waitForTimeout(2600);
+      await p.screenshot({ path: `${out}/${j.id}_b.jpg`, quality: 85 });
+      process.stdout.write('.');
+      continue;
+    }
     // toothpaste and bristles get a close-up of the head (toothpaste-step camera, tube hidden)
     const closeUp = j.id.startsWith('paste_') || j.id.startsWith('bristles_');
     await p.evaluate(({ o, paste, closeUp }) => {

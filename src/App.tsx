@@ -5,7 +5,7 @@ import { CATALOG, nextGoal, REWARDS, type Item } from './config/economy';
 import { useT } from './i18n/ui';
 import { audio, haptic } from './audio/audio';
 import { Customizer, Swatch } from './ui/Customizer';
-import { looks } from './ui/looks';
+import { jawFor, looks } from './ui/looks';
 import type { HintKind, ScreenPos } from './game/Game';
 
 const SFX = ['scrub_loop', 'electric_loop', 'foam_loop', 'squeeze', 'bubble_pop', 'food_pop', 'tooth_ding', 'spit', 'applause', 'star_tick', 'fanfare', 'tap', 'locked', 'whoosh'];
@@ -33,10 +33,11 @@ export default function App() {
     if (!canvasRef.current || gameSingleton) return;
     const l = looks(useStore.getState().profile);
     gameSingleton = new Game(canvasRef.current, l.brush, l.paste);
+    gameSingleton.setJaw(jawFor(useStore.getState().profile));
     gameSingleton.start();
     (window as unknown as { __game: Game }).__game = gameSingleton;
     // hooks for the automated render / review scripts
-    Object.assign(window, { __looks: looks, __store: useStore, __catalog: CATALOG });
+    Object.assign(window, { __looks: looks, __jawFor: jawFor, __store: useStore, __catalog: CATALOG });
     setGame(gameSingleton);
     requestAnimationFrame(() => requestAnimationFrame(() => { (window as unknown as { __ready: boolean }).__ready = true; }));
   }, []);
@@ -49,6 +50,7 @@ export default function App() {
     game.setBrushLook(l.brush);
     game.setPasteLook(l.paste);
   }, [game, eq.brushType, eq.handle, eq.bristles, eq.paste]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (game) game.setJaw(jawFor(profile)); }, [game, eq.jaw, loaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // map UI screens to 3D phases
   useEffect(() => {
