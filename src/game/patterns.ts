@@ -8,11 +8,11 @@ import { NOISE_GLSL } from './materials';
  */
 export type PatternId =
   | 'solid' | 'gradient' | 'rainbow' | 'flames' | 'tiger' | 'zebra' | 'leopard' | 'dalmatian'
-  | 'pixelGrass' | 'pixelGem' | 'pixelLava' | 'galaxy' | 'glitter' | 'dinoSkin';
+  | 'pixelGrass' | 'pixelGem' | 'pixelLava' | 'galaxy' | 'glitter' | 'dinoSkin' | 'lionFur';
 
 const PATTERN_INDEX: Record<PatternId, number> = {
   solid: 0, gradient: 1, rainbow: 2, flames: 3, tiger: 4, zebra: 5, leopard: 6, dalmatian: 7,
-  pixelGrass: 8, pixelGem: 9, pixelLava: 10, galaxy: 11, glitter: 12, dinoSkin: 13,
+  pixelGrass: 8, pixelGem: 9, pixelLava: 10, galaxy: 11, glitter: 12, dinoSkin: 13, lionFur: 14,
 };
 
 export interface PatternOptions {
@@ -212,6 +212,15 @@ vec3 l2b_ramp(float t){
     col = mix(col, uC2, smoothstep(-0.25, -0.75, topness) * 0.85);
     col *= 0.78 + 0.22 * smoothstep(0.05, 0.4, sc);   // darker grooves between scales
     l2b_rough = 0.5;
+  }
+  else if (uPattern == 14) {
+    // lion fur: warm gold with soft streaks running along the handle, darker back, cream belly
+    float streak = l2b_fbm(vec3(p.x * 0.06, p.y * 0.9, p.z * 0.9));
+    float fine = l2b_noise(vec3(p.x * 0.25, p.y * 3.0, p.z * 3.0));
+    col = mix(uC0, uC1, smoothstep(0.35, 0.75, streak) * 0.55 + smoothstep(0.3, 0.9, topness) * 0.25);
+    col = mix(col, uC2, smoothstep(-0.2, -0.7, topness) * 0.8);
+    col *= 0.9 + 0.12 * fine;
+    l2b_rough = 0.65;
   }
   // sword: polished blade near the head
   if (uBladeEnd > 0.0 && p.x < uBladeEnd) {

@@ -127,7 +127,7 @@ export class Brush {
     this.clear();
     const L = this.look;
     const headTop = this.bristleLen; // bristle base plane
-    const headColor = L.shape === 'dino' ? '#2e7d32' : (L.head ?? L.handle[0]);
+    const headColor = L.shape === 'dino' ? '#2e7d32' : L.shape === 'lion' ? '#c98a3a' : (L.head ?? L.handle[0]);
     if (L.type === 'manual') {
       const head = new THREE.Mesh(new RoundedBoxGeometry(21, 3.2, 9.5, 4, 1.4), this.plastic(headColor));
       head.position.set(0, headTop + 1.6, 0);
@@ -153,7 +153,7 @@ export class Brush {
       disc.position.set(0, headTop + 1.5, 0);
       this.add(this.head, disc);
       const { handle, shape } = this.buildHandle(ELECTRIC_PROFILE, 36, 0.92, new THREE.Vector3(4, headTop + 2.6, 0), 0.06);
-      if (shape === 'classic' || shape === 'dino' || shape === 'wand') {
+      if (shape === 'classic' || shape === 'dino' || shape === 'lion' || shape === 'wand') {
         const btn = new THREE.Mesh(new THREE.CylinderGeometry(3.6, 3.6, 1.6, 28), new THREE.MeshPhysicalMaterial({ color: L.accent, roughness: 0.6 }));
         btn.position.set(75, 10.4, 0);
         handle.add(btn);
