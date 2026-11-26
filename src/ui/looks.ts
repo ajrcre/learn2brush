@@ -3,12 +3,18 @@ import type { PasteLook } from '../game/Paste';
 import type { PatternId } from '../game/patterns';
 import type { ShapeId } from '../game/brushShapes';
 import type { Profile } from '../state/store';
-import { item, isVisible, useUpgrade, DEFAULT_EQUIPPED, type Category, type Item } from '../config/economy';
+import { item, isComingSoon, isVisible, useUpgrade, DEFAULT_EQUIPPED, type Category, type Item } from '../config/economy';
 
 /** Equipped item for a category; falls back to the free default if it's hidden (still in review). */
 function pick(eq: Record<Category, string>, cat: Category): Item {
   const it = item(eq[cat]);
   return it && isVisible(it) ? it : item(DEFAULT_EQUIPPED[cat]);
+}
+
+/** The jaws to brush: the equipped animal, or kid teeth if that one isn't playable (yet). */
+export function jawFor(p: Profile): string {
+  const it = item(p.equipped.jaw);
+  return it && isVisible(it) && !isComingSoon(it) ? it.id : DEFAULT_EQUIPPED.jaw;
 }
 
 /** 3D looks for the equipped items, optionally overridden (e.g. a locked item being "tried on"). */

@@ -8,13 +8,13 @@ npm install
 npm run dev        # http://localhost:5173
 npm run build      # type-check + production build (dist/)
 ```
-Dev URL flags: `?unlockall` (review mode, everything unlocked), `?q=high|medium|low` (force render quality).
+Dev URL flags: `?review` (show items waiting for approval, e.g. the goat jaws), `?unlockall` (everything unlocked), `?q=high|medium|low` (force render quality).
 
 ## Stack
 Vite + TypeScript + React (UI only) + plain Three.js (scene) with `postprocessing` + N8AO, zustand, idb-keyval, vite-plugin-pwa.
 
 ## Code map
-- `src/game/jaws/` – code-built baby teeth (20) and gums; per-vertex plaque, side classification (outer/inner/chewing), cleaning.
+- `src/game/jaws/` – code-built teeth and gums; per-vertex plaque, side classification (outer/inner/chewing), cleaning. `designs.ts` lays out each animal: kid teeth (20 baby teeth) and goat (20 milk teeth: dental pad instead of upper front teeth, 8 spade-shaped lower front teeth, a toothless gap, ridged cheek teeth).
 - `src/game/materials.ts` – enamel and gum shaders (wet clearcoat, fake translucency, plaque blend).
 - `src/game/Brush.ts`, `Paste.ts`, `Effects.ts` (foam, bubbles, sparkles), `Food.ts` (leftovers).
 - `src/game/Game.ts` – phases, camera, input, brushing logic, progress events.

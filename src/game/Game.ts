@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Stage, detectQuality } from './Stage';
-import { HumanJaws, type SideProgress } from './jaws/HumanJaws';
+import { Jaws, type SideProgress } from './jaws/Jaws';
+import { HUMAN, JAW_DESIGNS } from './jaws/designs';
 import { SIDE_CHEWING, SIDE_INNER, SIDE_OUTER } from './jaws/toothGeometry';
 import { Brush, type BrushLook } from './Brush';
 import { Paste, createTube, type PasteLook } from './Paste';
@@ -37,7 +38,12 @@ const damp = (a: number, b: number, k: number, dt: number) => THREE.MathUtils.le
 
 export class Game {
   readonly stage: Stage;
-  readonly jaws = new HumanJaws();
+  /** the mouth being brushed; replaced when another animal is picked */
+  jaws = new Jaws(HUMAN);
+  /** jaw tab of the shop: show the jaws instead of the brush */
+  private jawPreview = false;
+  /** previewing an animal whose jaws aren't built yet: show neither jaws nor brush */
+  private previewBlank = false;
   readonly brush: Brush;
   readonly paste: Paste;
   readonly foam = new Foam();
@@ -139,11 +145,41 @@ export class Game {
     band.color.set(look.colors.length > 1 ? look.colors[1] : look.colors[0]);
   }
 
+  /** Swap in another animal's jaws (catalogue id, e.g. 'jaw_goat'). */
+  setJaw(id: string) {
+    const design = JAW_DESIGNS[id] ?? HUMAN;
+    if (design === this.jaws.design) return;
+    // food and bugs sit on the old teeth: clear them first
+    this.food.reset(this.jaws, 0, 0);
+    this.bugs.reset(this.jaws, 0, 0);
+    this.foam.clear();
+    this.jaws.dispose();
+    this.jaws = new Jaws(design);
+    this.content.add(this.jaws.root);
+    for (const t of this.jaws.teeth) { t.dirt.fill(0); (t.mesh.geometry.getAttribute('dirt') as THREE.BufferAttribute).needsUpdate = true; }
+    this.updateModel(100);
+    if (this.phase === 'brush') this.startBrushing();
+  }
+
+  /** In the customiser's jaw tab, show (and slowly turn) these jaws instead of the brush; null = back to the brush. */
+  setJawPreview(id: string | null) {
+    this.jawPreview = id !== null;
+    this.previewBlank = id !== null && !JAW_DESIGNS[id];
+    if (id && !this.previewBlank) this.setJaw(id);
+    if (this.phase === 'customize') this.applyVisibility();
+  }
+
+  private applyVisibility() {
+    const p = this.phase;
+    const preview = p === 'customize' && this.jawPreview;
+    this.model.visible = p === 'home' || p === 'brush' || p === 'spit' || p === 'done' || (preview && !this.previewBlank);
+    this.brush.group.visible = p !== 'home' && p !== 'done' && p !== 'spit' && !preview;
+  }
+
   setPhase(p: Phase) {
     this.phase = p;
-    const showJaws = p === 'home' || p === 'brush' || p === 'spit' || p === 'done';
-    this.model.visible = showJaws;
-    this.brush.group.visible = p !== 'home' && p !== 'done' && p !== 'spit';
+    if (p !== 'customize') this.jawPreview = false;
+    this.applyVisibility();
     this.tube.group.visible = p === 'paste';
     this.paste.mesh.visible = p === 'paste';
     if (p === 'customize') this.setShowcasePaste(false);
@@ -300,7 +336,14 @@ export class Game {
 
     // ---- camera framing per phase ----
     const tanHalf = Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2);
-    if (this.phase === 'customize') {
+    if (this.phase === 'customize' && this.jawPreview) {
+      // small jaws in the band between the category buttons and the price pill
+      const d = this.fitDistance(portrait ? 82 : 0, portrait ? 0 : 200);
+      const visH = 2 * d * tanHalf;
+      const lift = portrait ? 0.15 : 0.19;
+      this.camTarget.set(0, -visH * lift, 0);
+      this.camPos.set(0, -visH * lift + 12, d);
+    } else if (this.phase === 'customize') {
       // brush shown in the upper part of the screen, above the selection panel
       // brush sits in the empty band between the category buttons and the carousel
       // frame the whole brush including shape parts on the end (star, flame, horn)
@@ -318,7 +361,7 @@ export class Game {
       this.camPos.set(2, 6 - visH * 0.1 + d * 0.55, d * 0.85);
     } else {
       const both = this.focusUpper > 0.5 && this.focusLower > 0.5;
-      const w = 54, h = both ? 44 : 40;
+      const w = this.jaws.design.frameWidth, h = both ? 44 : 40;
       // reserve room for UI bars
       this.camTarget.set(0, portrait ? -2 : 0, 0);
       this.camPos.set(0, portrait ? -2 : 0, this.fitDistance(w * 1.12, h * (portrait ? 1.5 : 1.3)));
@@ -353,7 +396,7 @@ export class Game {
   }
 
   private updateModel(dt: number) {
-    if (this.phase === 'home' || this.phase === 'done' || this.phase === 'spit') {
+    if (this.phase === 'home' || this.phase === 'done' || this.phase === 'spit' || (this.phase === 'customize' && this.jawPreview)) {
       if (this.mode !== 'rotate') { this.turntable += dt * 0.35; this.yawT = Math.sin(this.turntable) * 0.6; }
     }
     this.yaw = damp(this.yaw, this.yawT, 8, dt);
@@ -363,11 +406,12 @@ export class Game {
     const fl = this.phase === 'brush' && this.view === 'upper' ? 0 : 1;
     this.focusUpper = damp(this.focusUpper, fu, 6, dt);
     this.focusLower = damp(this.focusLower, fl, 6, dt);
-    this.jaws.upper.position.y = 6.5 + (1 - this.focusUpper) * 80;
-    this.jaws.lower.position.y = -6.5 - (1 - this.focusLower) * 80;
+    const bite = this.jaws.design.bite;
+    this.jaws.upper.position.y = bite + (1 - this.focusUpper) * 80;
+    this.jaws.lower.position.y = -bite - (1 - this.focusLower) * 80;
     this.jaws.upper.visible = this.focusUpper > 0.05;
     this.jaws.lower.visible = this.focusLower > 0.05;
-    const cy = this.view === 'upper' && this.phase === 'brush' ? -6.5 : this.view === 'lower' && this.phase === 'brush' ? 6.5 : 0;
+    const cy = this.view === 'upper' && this.phase === 'brush' ? -bite : this.view === 'lower' && this.phase === 'brush' ? bite : 0;
     this.contentY = damp(this.contentY, cy, 6, dt);
     this.content.position.y = this.contentY;
     this.model.updateMatrixWorld(true);
@@ -430,7 +474,7 @@ export class Game {
       normal = new THREE.Vector3(-1, 0.2, 0.3).normalize();
     }
     // orientation: brush +Y = surface normal, handle (+X) points out of the mouth & towards the viewer
-    const archCenter = this.content.localToWorld(this.tmpV.set(0, 0, -6));
+    const archCenter = this.content.localToWorld(this.tmpV.set(0, 0, this.jaws.archCenter.z - 2));
     const out = target.clone().sub(archCenter);
     out.y *= 0.3;
     out.normalize().add(new THREE.Vector3(0.45, 0, 0.3));

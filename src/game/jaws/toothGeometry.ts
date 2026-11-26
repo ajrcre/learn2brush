@@ -5,14 +5,20 @@ import * as THREE from 'three';
  * Local frame: +y = towards the biting edge (crown), +z = outer (cheek/lip) side, +x = along the arch.
  * y = 0 is the neck (cemento-enamel junction); the root continues below and is hidden in the gum.
  */
-export type ToothKind = 'incisor' | 'canine' | 'molar';
+/** incisor/canine/molar: human. spade: goat front tooth (narrow neck, wide thin blade). cheek: goat grinding tooth with crescent ridges. */
+export type ToothKind = 'incisor' | 'canine' | 'molar' | 'spade' | 'cheek';
 
 export interface ToothSpec {
   kind: ToothKind;
   w: number; // crown width along arch
   t: number; // crown thickness (outer↔inner)
   h: number; // crown height above neck
+  /** cheek teeth: number of crescent lobes along the arch */
+  lobes?: number;
 }
+
+/** Teeth with a broad grinding top (food sits on it, more of the crown counts as the chewing side). */
+export const isGrinder = (kind: ToothKind) => kind === 'molar' || kind === 'cheek';
 
 export const SIDE_OUTER = 0;
 export const SIDE_INNER = 1;
@@ -66,15 +72,29 @@ function profile(kind: ToothKind, q: number, rootDepthQ: number): [number, numbe
       const sz = (0.8 + 0.2 * bulge) * (1 - 0.1 * smooth(0.45, 1, q));
       return [sx, sz, 3.0];
     }
+    case 'spade': {
+      // narrow neck fanning out into a wide, thin, flat-edged blade
+      const fan = smooth(0, 0.8, q);
+      const sx = 0.56 + 0.44 * fan;
+      const sz = (0.85 + 0.15 * smooth(0, 0.25, q)) * (1 - 0.66 * smooth(0.2, 1.0, q));
+      return [sx, sz, 2.4 + 1.8 * smooth(0.2, 1, q)];
+    }
+    case 'cheek': {
+      // tall, boxy grinding tooth, a little narrower at the top
+      const sx = (0.84 + 0.16 * bulge) * (1 - 0.05 * smooth(0.5, 1, q));
+      const sz = (0.82 + 0.18 * bulge) * (1 - 0.12 * smooth(0.4, 1, q));
+      return [sx, sz, 3.4];
+    }
   }
 }
 
 function capHeight(kind: ToothKind, h: number) {
-  return kind === 'canine' ? 0.42 * h : kind === 'incisor' ? 0.14 * h : 0.2 * h;
+  return kind === 'canine' ? 0.42 * h : kind === 'incisor' || kind === 'spade' ? 0.14 * h : 0.2 * h;
 }
 
 /** Occlusal relief for molars: cusps with a central fissure. u,w ∈ [-1,1]. */
-function cuspField(kind: ToothKind, u: number, w: number, rand: () => number, cusps: number[][]) {
+function cuspField(kind: ToothKind, u: number, w: number, rand: () => number, cusps: number[][], lobes = 2) {
+  if (kind === 'cheek') return crescentField(u, w, lobes);
   if (kind !== 'molar') return 0;
   let f = 0;
   for (const [cu, cw, a] of cusps) {
@@ -85,6 +105,28 @@ function cuspField(kind: ToothKind, u: number, w: number, rand: () => number, cu
   f -= 0.55 * Math.exp(-(w * w) / 0.02) * (1 - 0.6 * u * u);
   f -= 0.25 * Math.exp(-(u * u) / 0.015) * (1 - w * w);
   void rand;
+  return f;
+}
+
+/**
+ * Grinding surface of a goat cheek tooth: each lobe has a crescent-shaped enamel ridge on the outer
+ * and on the inner side, with a valley down the middle (like a real ruminant's "selenodont" teeth).
+ */
+function crescentField(u: number, w: number, lobes: number) {
+  let f = 0;
+  const span = 2 / lobes;
+  for (let l = 0; l < lobes; l++) {
+    const cu = -1 + span * (l + 0.5);
+    const du = (u - cu) / (span / 2); // -1..1 inside this lobe
+    const fall = Math.max(0, 1 - 0.55 * du * du);
+    const wo = 0.6 - 0.28 * du * du; // outer crescent opens inwards
+    const wi = -0.52 + 0.26 * du * du; // inner crescent opens outwards
+    f += 1.0 * Math.exp(-((w - wo) ** 2) / 0.035) * fall;
+    f += 0.85 * Math.exp(-((w - wi) ** 2) / 0.035) * fall;
+    // dip between lobes
+    if (l > 0) f -= 0.35 * Math.exp(-((u - (cu - span / 2)) ** 2) / 0.012);
+  }
+  f -= 0.45 * Math.exp(-((w - 0.04) ** 2) / 0.03) * (1 - 0.4 * u * u);
   return f;
 }
 
@@ -153,7 +195,7 @@ export function buildToothGeometry(spec: ToothSpec, seed: number): ToothGeometry
   // cap rings
   const lastHx = Math.max(...ringEdge.map(e => Math.abs(e[0])));
   const lastHz = Math.max(...ringEdge.map(e => Math.abs(e[1])));
-  const cuspAmp = kind === 'molar' ? h * 0.16 : 0;
+  const cuspAmp = kind === 'molar' ? h * 0.16 : kind === 'cheek' ? h * 0.15 : 0;
   for (let j = 1; j <= V_CAP; j++) {
     const s = j / V_CAP;
     const r = Math.cos(s * Math.PI * 0.5);
@@ -164,12 +206,12 @@ export function buildToothGeometry(spec: ToothSpec, seed: number): ToothGeometry
       const [ex, ez] = ringEdge[i];
       const x = ex * r, z = ez * r;
       const u = x / lastHx, ww = z / lastHz;
-      let y = yBase + cuspAmp * cuspField(kind, u, ww, rand, cusps) * smooth(0, 0.35, s);
+      let y = yBase + cuspAmp * cuspField(kind, u, ww, rand, cusps, spec.lobes) * smooth(0, 0.35, s);
       if (kind === 'incisor') y += h * 0.035 * Math.cos(u * Math.PI * 1.5) * smooth(0.2, 0.8, s) * (1 - u * u);
       put(x, y, z);
     }
   }
-  const topY = kind === 'molar' ? h - capH * 0.4 : h;
+  const topY = isGrinder(kind) ? h - capH * 0.4 : h;
   put(0, topY, 0); // apex top
   put(0, -root - 0.4, 0); // apex bottom
 
@@ -199,7 +241,7 @@ export function buildToothGeometry(spec: ToothSpec, seed: number): ToothGeometry
   // classify sides
   const nrm = g.getAttribute('normal') as THREE.BufferAttribute;
   const sides = new Uint8Array(vertCount);
-  const chewStart = kind === 'molar' ? 0.62 : kind === 'canine' ? 0.8 : 0.86;
+  const chewStart = isGrinder(kind) ? 0.62 : kind === 'canine' ? 0.8 : 0.86;
   for (let k = 0; k < vertCount; k++) {
     const y = pos[k * 3 + 1];
     const ny = nrm.getY(k), nz = nrm.getZ(k);

@@ -25,10 +25,12 @@ export interface EnamelUniforms {
   uGlow: { value: number };
   uIncisal: { value: number };
   uTime: { value: number };
+  /** multiplies the clean enamel colour (animal teeth are a little creamier) */
+  uTint: { value: THREE.Color };
 }
 
 /** Tooth enamel: wet clearcoat, cervical→incisal colour gradient, fake translucency, plaque blended by per-vertex `dirt`. */
-export function createEnamelMaterial(incisal = 1): THREE.MeshPhysicalMaterial & { userData: { uniforms: EnamelUniforms } } {
+export function createEnamelMaterial(incisal = 1, tint: THREE.ColorRepresentation = 0xffffff): THREE.MeshPhysicalMaterial & { userData: { uniforms: EnamelUniforms } } {
   const m = new THREE.MeshPhysicalMaterial({
     color: 0xffffff,
     roughness: 0.3,
@@ -41,7 +43,7 @@ export function createEnamelMaterial(incisal = 1): THREE.MeshPhysicalMaterial & 
     sheenRoughness: 0.4,
     sheenColor: new THREE.Color(0xfff6ea),
   });
-  const uniforms: EnamelUniforms = { uGlow: { value: 0 }, uIncisal: { value: incisal }, uTime: { value: 0 } };
+  const uniforms: EnamelUniforms = { uGlow: { value: 0 }, uIncisal: { value: incisal }, uTime: { value: 0 }, uTint: { value: new THREE.Color(tint) } };
   m.userData.uniforms = uniforms;
   m.customProgramCacheKey = () => 'l2b-enamel';
   m.onBeforeCompile = (shader) => {
@@ -56,7 +58,7 @@ vDirt = dirt; vCrownT = crownT; vObjPos = position;
 transformed += objectNormal * dirt * 0.32;`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
-uniform float uGlow; uniform float uIncisal; uniform float uTime;
+uniform float uGlow; uniform float uIncisal; uniform float uTime; uniform vec3 uTint;
 varying float vDirt; varying float vCrownT; varying vec3 vObjPos;
 ${NOISE_GLSL}
 float l2b_plaque;`)
@@ -68,7 +70,7 @@ float l2b_plaque;`)
   vec3 inc  = vec3(0.84, 0.88, 0.93);
   vec3 enamel = mix(cerv, mid, smoothstep(0.02, 0.45, vCrownT));
   enamel = mix(enamel, inc, smoothstep(0.78, 1.0, vCrownT) * uIncisal * 0.7);
-  diffuseColor.rgb = enamel * (0.965 + 0.07 * n);
+  diffuseColor.rgb = enamel * uTint * (0.965 + 0.07 * n);
   float pn = l2b_fbm(vObjPos * 0.55 + 7.0);
   float speck = l2b_noise(vObjPos * 2.2 + 11.0);
   l2b_plaque = smoothstep(0.05, 0.32, vDirt * (0.65 + 0.7 * pn));
@@ -95,8 +97,11 @@ totalEmissiveRadiance += diffuseColor.rgb * (0.05 + 0.35 * uGlow);`);
   return m as never;
 }
 
-/** Gums: wet, soft, stippled, with deeper colour at the tooth margin. Uses `gumT` (0 base → 1 margin). */
-export function createGumMaterial(): THREE.MeshPhysicalMaterial {
+/**
+ * Gums: wet, soft, stippled, with deeper colour at the tooth margin. Uses `gumT` (0 base → 1 margin)
+ * and `padT` (1 on a toothless dental pad, like a goat's upper front: paler, firmer, with cross ridges).
+ */
+export function createGumMaterial(tint: THREE.ColorRepresentation = 0xffffff): THREE.MeshPhysicalMaterial {
   const m = new THREE.MeshPhysicalMaterial({
     color: 0xffffff,
     roughness: 0.46,
@@ -107,16 +112,19 @@ export function createGumMaterial(): THREE.MeshPhysicalMaterial {
     sheenColor: new THREE.Color(0xff6f80),
     specularIntensity: 0.5,
   });
+  const uTint = { value: new THREE.Color(tint) };
   m.customProgramCacheKey = () => 'l2b-gum';
   m.onBeforeCompile = (shader) => {
+    shader.uniforms.uGumTint = uTint;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
-attribute float gumT; varying float vGumT; varying vec3 vObjPos;`)
+attribute float gumT; attribute float padT; varying float vGumT; varying float vPadT; varying vec3 vObjPos;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
-vGumT = gumT; vObjPos = position;`);
+vGumT = gumT; vPadT = padT; vObjPos = position;`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
-varying float vGumT; varying vec3 vObjPos;
+uniform vec3 uGumTint;
+varying float vGumT; varying float vPadT; varying vec3 vObjPos;
 ${NOISE_GLSL}`)
       .replace('#include <color_fragment>', `#include <color_fragment>
 {
@@ -128,12 +136,19 @@ ${NOISE_GLSL}`)
   c = mix(c, margin, smoothstep(0.9, 1.0, vGumT));
   // faint capillary variation
   c *= 0.93 + 0.12 * n;
-  diffuseColor.rgb = c;
+  // dental pad: paler, tougher-looking gum
+  c = mix(c, vec3(0.93, 0.62, 0.60), vPadT * smoothstep(0.3, 0.85, vGumT) * 0.75);
+  diffuseColor.rgb = c * uGumTint;
 }`)
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+roughnessFactor = mix(roughnessFactor, 0.62, vPadT);`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
 {
   float hh = l2b_fbm(vObjPos * 1.6);
-  normal = l2b_bump(normal, -vViewPosition, hh, 0.12);
+  // soft ridges running along the pad
+  float ridges = 0.5 + 0.5 * sin(length(vObjPos.xz) * 2.4);
+  hh += vPadT * smoothstep(0.35, 0.8, vGumT) * ridges * 1.6;
+  normal = l2b_bump(normal, -vViewPosition, hh, 0.12 + vPadT * 0.1);
 }`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
 totalEmissiveRadiance += diffuseColor.rgb * vec3(0.12, 0.03, 0.03);`);
