@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { buildToothGeometry, rng, SIDE_CHEWING, SIDE_INNER, SIDE_NONE, SIDE_OUTER, type ToothKind, type ToothSpec } from './toothGeometry';
 import { createEnamelMaterial, createGumMaterial } from '../materials';
 import { speciesFor, type Species } from './species';
+import { buildAlligatorHead } from './heads';
 
 /** how strongly the biting edge looks translucent */
 const INCISAL: Partial<Record<ToothKind, number>> = { incisor: 1, canine: 0.6, fang: 0.7, cone: 0.6, blade: 0.8 };
@@ -49,6 +50,9 @@ export class Jaws {
   readonly toothMeshes: THREE.Mesh[] = [];
   readonly species: Species;
   readonly gumMat: THREE.MeshPhysicalMaterial;
+  /** head parts: they hide what's behind them but can't be brushed */
+  readonly occluders: THREE.Mesh[] = [];
+  private arches: Partial<Record<'upper' | 'lower', THREE.CatmullRomCurve3>> = {};
 
   constructor(speciesId = 'jaw_human', seed = 7) {
     this.species = speciesFor(speciesId);
@@ -56,6 +60,9 @@ export class Jaws {
     this.root.add(this.upper, this.lower);
     this.buildJaw('upper', this.species.upper, seed);
     this.buildJaw('lower', this.species.lower, seed + 101);
+    if (this.species.head === 'alligator') {
+      this.occluders.push(...buildAlligatorHead({ curve: this.arches.upper!, group: this.upper, away: 1 }, { curve: this.arches.lower!, group: this.lower, away: -1 }));
+    }
     this.upper.position.y = this.species.open;
     this.lower.position.y = -this.species.open;
     this.root.updateMatrixWorld(true);
@@ -77,6 +84,7 @@ export class Jaws {
     const widths = order.map(s => s.w);
     const total = widths.reduce((a, b) => a + b, 0) + sp.gap * (order.length - 1);
     const curve = makeArch(sp.arch, total, which === 'upper' ? 1.0 : sp.lowerWiden, sp.zShift);
+    this.arches[which] = curve;
     const L = curve.getLength();
     const centers: number[] = [];
     let s = 0;

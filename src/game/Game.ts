@@ -277,10 +277,10 @@ export class Game {
   /** Raycast teeth / gums / food. */
   private pick(): boolean {
     this.ray.setFromCamera(this.ndc, this.stage.camera);
-    const targets: THREE.Object3D[] = [...this.jaws.toothMeshes.filter(m => m.parent!.visible), ...this.jaws.gums.filter(g => g.parent!.visible), ...this.food.meshes()];
+    const targets: THREE.Object3D[] = [...this.jaws.toothMeshes.filter(m => m.parent!.visible), ...this.jaws.gums.filter(g => g.parent!.visible), ...this.jaws.occluders.filter(o => o.parent!.visible), ...this.food.meshes()];
     const hits = this.ray.intersectObjects(targets, false);
     const h = hits[0];
-    if (!h || !h.face) return false;
+    if (!h || !h.face || h.object.userData.head) return false; // the head can't be brushed (drag turns it)
     this.hitPoint.copy(h.point);
     this.hitNormal.copy(h.face.normal).transformDirection(h.object.matrixWorld);
     if (this.hitNormal.dot(this.ray.ray.direction) > 0) this.hitNormal.negate();
@@ -598,7 +598,7 @@ export class Game {
   private visibleSpot(c: { mesh: THREE.Object3D; space: THREE.Object3D; spots: { p: THREE.Vector3; n: THREE.Vector3 }[] }) {
     const cam = this.stage.camera;
     if (!c.mesh.parent?.visible) return null;
-    const targets: THREE.Object3D[] = [...this.jaws.toothMeshes.filter(m => m.parent!.visible), ...this.jaws.gums.filter(g => g.parent!.visible), ...this.food.meshes()];
+    const targets: THREE.Object3D[] = [...this.jaws.toothMeshes.filter(m => m.parent!.visible), ...this.jaws.gums.filter(g => g.parent!.visible), ...this.jaws.occluders.filter(o => o.parent!.visible), ...this.food.meshes()];
     for (const local of c.spots) {
       const sp = { p: local.p.clone().applyMatrix4(c.space.matrixWorld), n: local.n.clone().transformDirection(c.space.matrixWorld) };
       const toCam = cam.position.clone().sub(sp.p).normalize();
@@ -757,7 +757,7 @@ export class Game {
       this.pitchT = THREE.MathUtils.clamp(this.pitchT + dp, -1.25, 1.25);
       this.updateModel(100);
       this.model.updateMatrixWorld(true);
-      const targets = [...this.jaws.toothMeshes.filter(m => m.parent!.visible), ...this.jaws.gums.filter(g => g.parent!.visible)];
+      const targets = [...this.jaws.toothMeshes.filter(m => m.parent!.visible), ...this.jaws.gums.filter(g => g.parent!.visible), ...this.jaws.occluders.filter(o => o.parent!.visible)];
       this.jaws.teeth.forEach((t, ti) => {
         if (!t.mesh.parent!.visible) return;
         const pos = t.mesh.geometry.getAttribute('position');
