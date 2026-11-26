@@ -207,6 +207,46 @@
       "output": "public/audio/he/praise_1.mp3",
       "note": "",
       "approvedAt": "2026-11-25T21:09:18.965608+00:00"
+    },
+    "vline2:en:praise_1": {
+      "status": "approved",
+      "choice": "v1",
+      "source": "review/voice-r2b/en/praise_1.mp3",
+      "output": "public/audio/en/praise_1.mp3",
+      "note": "English: shipped without review (reviewer only reviews Hebrew)",
+      "approvedAt": "2026-11-26T06:30:22.655488+00:00"
+    },
+    "vline2:en:brush_start": {
+      "status": "approved",
+      "choice": "v1",
+      "source": "review/voice-r2b/en/brush_start.mp3",
+      "output": "public/audio/en/brush_start.mp3",
+      "note": "English: shipped without review (reviewer only reviews Hebrew)",
+      "approvedAt": "2026-11-26T06:30:22.655488+00:00"
+    },
+    "vline2:en:paste_too_much": {
+      "status": "approved",
+      "choice": "v1",
+      "source": "review/voice-r2b/en/paste_too_much.mp3",
+      "output": "public/audio/en/paste_too_much.mp3",
+      "note": "English: shipped without review (reviewer only reviews Hebrew)",
+      "approvedAt": "2026-11-26T06:30:22.655488+00:00"
+    },
+    "vline2:en:hint_inside": {
+      "status": "approved",
+      "choice": "v1",
+      "source": "review/voice-r2b/en/hint_inside.mp3",
+      "output": "public/audio/en/hint_inside.mp3",
+      "note": "English: shipped without review (reviewer only reviews Hebrew)",
+      "approvedAt": "2026-11-26T06:30:22.655488+00:00"
+    },
+    "vline2:en:finish": {
+      "status": "approved",
+      "choice": "v1",
+      "source": "review/voice-r2b/en/finish.mp3",
+      "output": "public/audio/en/finish.mp3",
+      "note": "English: shipped without review (reviewer only reviews Hebrew)",
+      "approvedAt": "2026-11-26T06:30:22.655488+00:00"
     }
   }
 }
