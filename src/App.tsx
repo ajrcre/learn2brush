@@ -278,6 +278,10 @@ function BrushStep({ game }: { game: Game }) {
         void audio.sfx('tooth_ding', 0.35, 1.4);
       }),
       game.on('autoTurn', () => { void audio.sfx('whoosh', 0.7); setView(game.view); }),
+      game.on('tongue', (what) => {
+        if (what === 'bump') { void audio.sfx('whoosh', 0.8, 0.6); haptic([30, 20, 30]); }
+        else { void audio.sfx('bubble_pop', 0.9, 0.55); void audio.sfx('food_pop', 0.7, 0.7); haptic(20); }
+      }),
       game.on('allClean', () => endRound('clean')),
     ];
     const iv = setInterval(() => {

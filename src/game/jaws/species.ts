@@ -34,7 +34,11 @@ export interface Species {
   /** a second row of baby teeth lying folded back behind the first (sharks) */
   spareRow?: boolean;
   /** the animal's head around the jaws (see heads.ts) */
-  head?: 'alligator' | 'goat' | 'lion';
+  head?: 'alligator' | 'goat' | 'lion' | 'venom';
+  /** a long tongue that slides out of the mouth and writhes around when nobody is brushing (see tongue.ts) */
+  tongue?: boolean;
+  /** harder level: while brushing, the tongue keeps coming out and getting in the way */
+  pester?: boolean;
 }
 
 const HUMAN_ARCH: [number, number][] = [
@@ -184,6 +188,47 @@ export const SPECIES: Record<string, Species> = {
     head: 'alligator',
     enamel: '#fff4e0',
     gum: { base: '#e2b0a0', ridge: '#f0cbb8', margin: '#d79484' },
+    gumDepth: 6.5,
+    gumWidth: 1.1,
+  },
+
+  // Venom: a huge wide grin crammed with long, jagged needle teeth of uneven length, dark gums,
+  // and that long tongue (tongue.ts). The mouth gapes wide so the tongue can slither out.
+  jaw_venom: {
+    id: 'jaw_venom',
+    upper: [
+      { kind: 'fang', w: 4.0, t: 4.2, h: 11.0, curve: 1.2 },
+      { kind: 'cone', w: 3.4, t: 3.6, h: 7.6, curve: 0.8 },
+      { kind: 'fang', w: 4.6, t: 4.8, h: 13.5, curve: 1.8 },
+      { kind: 'cone', w: 3.4, t: 3.6, h: 8.2, curve: 0.9 },
+      { kind: 'fang', w: 4.4, t: 4.6, h: 12.0, curve: 1.6 },
+      { kind: 'cone', w: 3.6, t: 3.8, h: 8.6, curve: 1.0 },
+      { kind: 'fang', w: 4.2, t: 4.4, h: 10.0, curve: 1.4 },
+      { kind: 'cone', w: 3.8, t: 4.0, h: 7.0, curve: 0.8 },
+    ],
+    lower: [
+      { kind: 'cone', w: 3.2, t: 3.4, h: 7.4, curve: 0.8 },
+      { kind: 'fang', w: 3.8, t: 4.0, h: 10.5, curve: 1.3 },
+      { kind: 'cone', w: 3.4, t: 3.6, h: 8.0, curve: 0.9 },
+      { kind: 'fang', w: 4.4, t: 4.6, h: 12.5, curve: 1.7 },
+      { kind: 'cone', w: 3.6, t: 3.8, h: 8.4, curve: 1.0 },
+      { kind: 'fang', w: 4.2, t: 4.4, h: 11.0, curve: 1.5 },
+      { kind: 'cone', w: 3.8, t: 4.0, h: 8.0, curve: 0.9 },
+      { kind: 'fang', w: 4.0, t: 4.2, h: 9.0, curve: 1.2 },
+    ],
+    arch: mirror([[-24, -14], [-23.4, -5], [-21, 2.5], [-16, 8.6], [-8.4, 12.4], [0, 13.6]]),
+    lowerWiden: 0.93,
+    gap: 0.9,
+    open: 15,
+    zShift: 0,
+    frame: { w: 70, h: 72 },
+    center: [0, 0, -6],
+    frontYaw: 0.2,
+    head: 'venom',
+    tongue: true,
+    pester: true,
+    enamel: '#fbfaf6',
+    gum: { base: '#8c2f42', ridge: '#a8475a', margin: '#7a2436', pigment: 0.7, pigmentColor: '#1c0a10' },
     gumDepth: 6.5,
     gumWidth: 1.1,
   },

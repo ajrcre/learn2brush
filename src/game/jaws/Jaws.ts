@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { buildToothGeometry, rng, SIDE_CHEWING, SIDE_INNER, SIDE_NONE, SIDE_OUTER, type ToothKind, type ToothSpec } from './toothGeometry';
 import { createEnamelMaterial, createGumMaterial } from '../materials';
 import { speciesFor, type Species } from './species';
-import { buildAlligatorHead, buildGoatHead, buildLionHead } from './heads';
+import { buildAlligatorHead, buildGoatHead, buildLionHead, buildVenomHead } from './heads';
+import { Tongue, type TongueMode } from './tongue';
 
 /** how strongly the biting edge looks translucent */
 const INCISAL: Partial<Record<ToothKind, number>> = { incisor: 1, canine: 0.6, fang: 0.7, cone: 0.6, blade: 0.8 };
@@ -61,15 +62,53 @@ export class Jaws {
     this.buildJaw('upper', this.species.upper, seed);
     this.buildJaw('lower', this.species.lower, seed + 101);
     if (this.species.head) {
-      const build = { alligator: buildAlligatorHead, goat: buildGoatHead, lion: buildLionHead }[this.species.head];
+      const build = { alligator: buildAlligatorHead, goat: buildGoatHead, lion: buildLionHead, venom: buildVenomHead }[this.species.head];
       this.occluders.push(...build({ curve: this.arches.upper!, group: this.upper, away: 1 }, { curve: this.arches.lower!, group: this.lower, away: -1 }, this.species.open));
     }
+    if (this.species.tongue) this.tongue = this.buildTongue();
     this.upper.position.y = this.species.open;
     this.lower.position.y = -this.species.open;
     this.root.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(this.root);
     this.depth = box.max.z - box.min.z;
     this.midY = (box.max.y + box.min.y) / 2;
+  }
+
+  /** a long tongue that comes out when nobody is brushing (not a tap target, never cleaned) */
+  readonly tongue?: Tongue;
+
+  /** Lay the tongue along the middle of the bottom jaw, leaving between the front teeth. */
+  private buildTongue() {
+    const sp = this.species;
+    const lowerArch = this.arches.lower!;
+    // tips of the front teeth: bottom ones (lower group space) and top ones (moved into lower group space)
+    const tipY = (jaw: 'upper' | 'lower') => {
+      const front = this.teeth.filter(t => t.jaw === jaw).sort((a, b) => b.mesh.matrix.elements[14] - a.mesh.matrix.elements[14]).slice(0, 4);
+      const box = new THREE.Box3();
+      for (const t of front) { t.mesh.geometry.computeBoundingBox(); box.union(t.mesh.geometry.boundingBox!.clone().applyMatrix4(t.mesh.matrix)); }
+      return jaw === 'lower' ? box.max.y : box.min.y + 2 * sp.open;
+    };
+    const lipY = (tipY('lower') + tipY('upper')) / 2;
+    return new Tongue({
+      lower: this.lower,
+      open: sp.open,
+      backZ: lowerArch.getPointAt(0).z,
+      frontZ: lowerArch.getPointAt(0.5).z + sp.lower[0].t / 2,
+      lipY,
+      floor: 2.6,
+      lowerArch,
+      upperArch: this.arches.upper!,
+    });
+  }
+
+  /** Per-frame animation (the tongue, see TongueMode). */
+  update(dt: number, tongue: TongueMode) {
+    this.tongue?.update(dt, tongue);
+  }
+
+  /** Things in the way of the brush right now (the pestering tongue): taps hit them instead of the teeth. */
+  blockers(): THREE.Object3D[] {
+    return this.tongue?.blocking && this.lower.visible ? [this.tongue.mesh] : [];
   }
 
   /** front-to-back size of the arch (mm), for framing the top and bottom views */

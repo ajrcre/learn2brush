@@ -27,6 +27,7 @@ const UI = {
   home: { en: 'Home', he: 'בַּיִת' },
   back: { en: 'Back', he: 'חֲזָרָה' },
   soon: { en: 'Soon', he: 'בְּקָרוֹב' },
+  hard: { en: 'Harder!', he: 'קָשֶׁה יוֹתֵר!' },
   owned: { en: 'Mine', he: 'שֶׁלִּי' },
   nextPrize: { en: 'Next prize', he: 'הַפְּרָס הַבָּא' },
   teethClean: { en: 'Clean teeth', he: 'שִׁנַּיִם נְקִיּוֹת' },
