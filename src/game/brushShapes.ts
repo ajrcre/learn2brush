@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { addGlitter } from './patterns';
 
-export type ShapeId = 'classic' | 'sword' | 'rocket' | 'dino' | 'lion' | 'shark' | 'wand';
+export type ShapeId = 'classic' | 'sword' | 'rocket' | 'dino' | 'shark' | 'wand';
 
 /** Where things can be attached: handle-local space, X along the handle (0 = neck, length = end), +Y = back of the handle. */
 export interface HandleInfo {
@@ -22,7 +22,7 @@ export interface ShapeParts {
   /** parts mounted on the brush head (brush-local space: bristle tips at y=0, head slab y≈9–12.2, x −10.5…10.5) */
   headObjects?: THREE.Object3D[];
   /** the shape brings its own handle look (e.g. dinosaur skin) */
-  pattern?: { pattern: 'dinoSkin' | 'lionFur'; colors: string[] };
+  pattern?: { pattern: 'dinoSkin'; colors: string[] };
 }
 
 const gold = () => {
@@ -255,183 +255,6 @@ export function buildShape(shape: ShapeId, h: HandleInfo): ShapeParts {
         add(spike);
       }
       return { objects, headObjects, pattern: { pattern: 'dinoSkin', colors: ['#4caf50', '#2e7d32', '#c5e1a5'] } };
-    }
-
-    case 'lion': {
-      // a friendly lion: round face over the brush head (the bristles are its teeth), big fluffy mane, tufted tail
-      const fur = h.material;
-      const head = new THREE.Group();
-      const faceMat = glossy('#e0a24c', { roughness: 0.55, clearcoat: 0.2, sheen: 0.8, sheenColor: new THREE.Color('#ffd89a') });
-      const creamMat = glossy('#fbe7c2', { roughness: 0.6, clearcoat: 0.15, sheen: 0.6, sheenColor: new THREE.Color('#ffffff') });
-      const dark = new THREE.MeshBasicMaterial({ color: '#2a1608' });
-
-      // face: a rounded, slightly squashed dome sitting on the head slab, short muzzle at the front (−x)
-      const faceGeo = new THREE.SphereGeometry(1, 48, 32);
-      const fp = faceGeo.getAttribute('position');
-      for (let i = 0; i < fp.count; i++) {
-        let x = fp.getX(i), y = fp.getY(i), z = fp.getZ(i);
-        const fx = (x + 1) / 2;                       // 0 = muzzle, 1 = back of the head
-        x *= 11.5;
-        z *= 7.4 * (0.82 + 0.18 * Math.pow(fx, 0.5));
-        y = y < 0 ? y * 1.3 : y * (7.2 + 2.6 * Math.pow(fx, 0.8));
-        // soft brow above the eyes
-        const brow = Math.exp(-((x + 1.5) ** 2) / 6) * Math.exp(-((Math.abs(z) - 3.4) ** 2) / 3) * 1.2;
-        if (y > 0) y += brow;
-        fp.setXYZ(i, x, y, z);
-      }
-      faceGeo.computeVertexNormals();
-      const face = new THREE.Mesh(faceGeo, faceMat);
-      face.position.set(-0.5, 12.6, 0);
-      head.add(face);
-
-      // muzzle: two puffy whisker pads + chin, with whisker dots and whiskers
-      for (const s2 of [-1, 1]) {
-        const pad = new THREE.Mesh(new THREE.SphereGeometry(3.1, 24, 16), creamMat);
-        pad.scale.set(0.95, 0.85, 1);
-        pad.position.set(-9.4, 14.2, 2.4 * s2);
-        head.add(pad);
-        for (const [dy, dz] of [[0.9, 0.6], [-0.2, 1.3], [-1.2, 0.8]] as const) {
-          const dot = new THREE.Mesh(new THREE.SphereGeometry(0.28, 8, 6), dark);
-          dot.position.set(-11.9, 14.2 + dy, (2.4 + dz) * s2);
-          head.add(dot);
-        }
-        for (const tilt of [0.18, -0.02, -0.22]) {
-          const wh = new THREE.Mesh(new THREE.CapsuleGeometry(0.12, 7, 2, 6), new THREE.MeshBasicMaterial({ color: '#fff8ea' }));
-          wh.position.set(-10.6, 14.2 + tilt * 6, (4.6 + 2.8) * s2);
-          wh.rotation.x = Math.PI / 2;
-          wh.rotation.z = tilt * s2;
-          wh.rotation.y = -0.25 * s2;
-          head.add(wh);
-        }
-        // little fangs peeking out under the whisker pads
-        const fang = new THREE.Mesh(new THREE.ConeGeometry(0.75, 2.6, 10), glossy('#fffaf0'));
-        fang.rotation.z = Math.PI;
-        fang.position.set(-10.6, 11.4, 1.5 * s2);
-        head.add(fang);
-      }
-      const chin = new THREE.Mesh(new THREE.SphereGeometry(2.2, 20, 14), creamMat);
-      chin.scale.set(0.9, 0.6, 1.1);
-      chin.position.set(-9.6, 11.9, 0);
-      head.add(chin);
-
-      // nose: soft rounded button on top of the muzzle + mouth line under it
-      const nose = new THREE.Mesh(new THREE.SphereGeometry(1.6, 20, 14), glossy('#5a2e1a', { roughness: 0.3 }));
-      nose.scale.set(0.8, 0.75, 1.25);
-      nose.position.set(-11.9, 16.3, 0);
-      head.add(nose);
-      const philtrum = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 1.4, 2, 6), dark);
-      philtrum.position.set(-12.3, 14.6, 0);
-      head.add(philtrum);
-
-      // eyes
-      const eyeW = glossy('#ffffff');
-      for (const s2 of [-1, 1]) {
-        const eye = new THREE.Mesh(new THREE.SphereGeometry(2.4, 20, 14), eyeW);
-        eye.position.set(-6.4, 18.0, 3.3 * s2);
-        const iris = new THREE.Mesh(new THREE.SphereGeometry(1.45, 14, 10), new THREE.MeshBasicMaterial({ color: '#7a4a12' }));
-        iris.position.set(-1.2, 0.2, 1.2 * s2);
-        const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.85, 12, 8), dark);
-        pupil.position.set(-1.75, 0.25, 1.55 * s2);
-        const shine = new THREE.Mesh(new THREE.SphereGeometry(0.4, 8, 6), new THREE.MeshBasicMaterial({ color: '#ffffff' }));
-        shine.position.set(-2.1, 1.0, 1.9 * s2);
-        eye.add(iris, pupil, shine);
-        head.add(eye);
-      }
-
-      // mane: rings of pointy fluffy tufts around the face (open at the bottom so the bristles stay visible), plus a back cap
-      const maneMats = [glossy('#c2621f', { roughness: 0.8, clearcoat: 0.05, sheen: 1, sheenColor: new THREE.Color('#ffc07a') }),
-        glossy('#99441a', { roughness: 0.85, clearcoat: 0.05, sheen: 1, sheenColor: new THREE.Color('#e8955a') })];
-      // teardrop: round at the base, soft point at +y
-      const tuftGeo = new THREE.SphereGeometry(1, 18, 12);
-      const tq = tuftGeo.getAttribute('position');
-      for (let i = 0; i < tq.count; i++) {
-        const y = tq.getY(i);
-        const k = y > 0 ? Math.pow(1 - y, 0.6) * 0.75 + 0.25 * (1 - y) : 1;
-        tq.setXYZ(i, tq.getX(i) * k, y > 0 ? y * 1.5 : y, tq.getZ(i) * k);
-      }
-      tuftGeo.computeVertexNormals();
-      const cy = 16.0;
-      const rings = [
-        { x: 1.6, r: 7.4, n: 13, size: 2.3, mat: 0 },
-        { x: 4.0, r: 8.6, n: 15, size: 2.5, mat: 1 },
-        { x: 6.4, r: 7.0, n: 11, size: 2.7, mat: 0 },
-      ];
-      rings.forEach((rg, ri) => {
-        for (let i = 0; i < rg.n; i++) {
-          // angle from straight up (0) round both sides to just above the head slab
-          const a = -1.9 + (3.8 * i) / (rg.n - 1) + (ri % 2 ? 0.12 : 0);
-          const y = cy + Math.cos(a) * rg.r * 0.9, z = Math.sin(a) * rg.r;
-          if (y < 13) continue;
-          const tuft = new THREE.Mesh(tuftGeo, maneMats[(i + ri) % 2 ? rg.mat : 1 - rg.mat]);
-          const sz = rg.size * (0.85 + 0.3 * Math.abs(Math.sin(i * 2.3 + ri)));
-          tuft.scale.set(sz * 0.75, sz * 1.3, sz);
-          tuft.position.set(rg.x, y, z);
-          tuft.rotation.x = -a; // point each tuft outward from the face
-          tuft.rotation.z = -0.25; // and slightly backwards
-          head.add(tuft);
-        }
-      });
-      const back = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), maneMats[1]);
-      back.scale.set(3.8, 5.6, 7);
-      back.position.set(7.8, 16.6, 0);
-      head.add(back);
-      // tufts on the back of the mane too (that's the side kids see most while brushing)
-      for (let i = 0; i < 7; i++) {
-        const a = (i / 7) * Math.PI * 2;
-        const tuft = new THREE.Mesh(tuftGeo, maneMats[i % 2]);
-        const y = 16.6 + Math.cos(a) * 3.4, z = Math.sin(a) * 4.2;
-        if (y < 13.5) continue;
-        tuft.scale.set(1.9, 2.4, 2.1);
-        tuft.position.set(10.2, y, z);
-        tuft.rotation.set(-a, 0, -Math.PI / 2 + 0.5, 'ZYX');
-        head.add(tuft);
-      }
-
-      // round ears poking out of the mane
-      for (const s2 of [-1, 1]) {
-        const ear = new THREE.Mesh(new THREE.SphereGeometry(2.6, 20, 14), faceMat);
-        ear.scale.set(0.55, 1, 1);
-        ear.position.set(-0.8, 21.8, 5.0 * s2);
-        ear.rotation.x = -0.5 * s2;
-        const inner = new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 10), glossy('#f2b0a0', { roughness: 0.6 }));
-        inner.position.set(-0.9, -0.2, 0);
-        inner.scale.set(0.5, 1, 1);
-        ear.add(inner);
-        head.add(ear);
-      }
-      const headObjects = [head];
-      head.traverse(c => { (c as THREE.Mesh).castShadow = true; });
-
-      // thin tail curling up from the end of the handle, with a dark fluffy tuft
-      const tailPts = [new THREE.Vector3(L - 6, 0, 0), new THREE.Vector3(L + 8, 0.5, 0), new THREE.Vector3(L + 20, 4, 0), new THREE.Vector3(L + 28, 12, 0), new THREE.Vector3(L + 29, 21, 0)];
-      const tailCurve = new THREE.CatmullRomCurve3(tailPts);
-      const tailGeo = new THREE.TubeGeometry(tailCurve, 60, 1, 14, false);
-      const tp = tailGeo.getAttribute('position');
-      const P = new THREE.Vector3(), V = new THREE.Vector3();
-      for (let i = 0; i < tp.count; i++) {
-        const f = Math.floor(i / 15) / 60;
-        tailCurve.getPointAt(f, P);
-        V.fromBufferAttribute(tp, i).sub(P);
-        const r = f < 0.15 ? 1.6 + (h.radius(L - 6) * 0.8 - 1.6) * (1 - f / 0.15) : 1.6;
-        V.multiplyScalar(r);
-        tp.setXYZ(i, P.x + V.x, P.y + V.y, P.z + V.z);
-      }
-      tailGeo.computeVertexNormals();
-      add(new THREE.Mesh(tailGeo, fur));
-      const tuftGroup = new THREE.Group();
-      tuftGroup.position.copy(tailCurve.getPointAt(1));
-      for (const [dx, dy, dz, r] of [[0, 2.2, 0, 3.2], [1.6, 0.8, 1.4, 2.4], [-1.6, 0.8, -1.4, 2.4], [1.2, 1.2, -1.6, 2.2], [-1.2, 1.4, 1.6, 2.2], [0, 4.6, 0, 2.0]] as const) {
-        const t = new THREE.Mesh(tuftGeo, maneMats[1]);
-        t.scale.set(r * 0.9, r, r * 0.9);
-        t.position.set(dx, dy, dz);
-        tuftGroup.add(t);
-      }
-      add(tuftGroup);
-      return {
-        objects, headObjects,
-        pattern: { pattern: 'lionFur', colors: ['#e3a948', '#c07a2c', '#fbe3b8'] },
-        update: (t) => { tuftGroup.rotation.z = Math.sin(t * 1.6) * 0.18; },
-      };
     }
 
     case 'shark': {
