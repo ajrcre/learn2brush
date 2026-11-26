@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { buildToothGeometry, rng, SIDE_CHEWING, SIDE_INNER, SIDE_NONE, SIDE_OUTER, type ToothKind, type ToothSpec } from './toothGeometry';
 import { createEnamelMaterial, createGumMaterial } from '../materials';
 import { speciesFor, type Species } from './species';
-import { buildAlligatorHead, buildGoatHead } from './heads';
+import { buildAlligatorHead, buildGoatHead, buildLionHead } from './heads';
 
 /** how strongly the biting edge looks translucent */
 const INCISAL: Partial<Record<ToothKind, number>> = { incisor: 1, canine: 0.6, fang: 0.7, cone: 0.6, blade: 0.8 };
@@ -61,8 +61,8 @@ export class Jaws {
     this.buildJaw('upper', this.species.upper, seed);
     this.buildJaw('lower', this.species.lower, seed + 101);
     if (this.species.head) {
-      const build = this.species.head === 'goat' ? buildGoatHead : buildAlligatorHead;
-      this.occluders.push(...build({ curve: this.arches.upper!, group: this.upper, away: 1 }, { curve: this.arches.lower!, group: this.lower, away: -1 }));
+      const build = { alligator: buildAlligatorHead, goat: buildGoatHead, lion: buildLionHead }[this.species.head];
+      this.occluders.push(...build({ curve: this.arches.upper!, group: this.upper, away: 1 }, { curve: this.arches.lower!, group: this.lower, away: -1 }, this.species.open));
     }
     this.upper.position.y = this.species.open;
     this.lower.position.y = -this.species.open;
