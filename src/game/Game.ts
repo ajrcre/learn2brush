@@ -336,8 +336,10 @@ export class Game {
       const d = this.fitDistance(frame.w * (portrait ? 1.25 : 2.2), frame.h * (portrait ? 3.1 : 4.8));
       const visH = 2 * d * tanHalf;
       const lift = portrait ? 0.1 : 0.17;
-      this.camTarget.set(0, -visH * lift, 0);
-      this.camPos.set(0, -visH * lift, d);
+      // centre the whole model (head and all), not just the bite
+      const y = this.jaws.midY - visH * lift;
+      this.camTarget.set(0, y, 0);
+      this.camPos.set(0, y, d);
     } else if (this.phase === 'customize') {
       // brush shown in the upper part of the screen, above the selection panel
       // brush sits in the empty band between the category buttons and the carousel

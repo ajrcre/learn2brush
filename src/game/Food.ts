@@ -13,6 +13,9 @@ interface Bit {
   vel: THREE.Vector3;
   spin: THREE.Vector3;
   age: number;
+  /** resting position (food-group space) and the jaw's height when it was placed */
+  rest: THREE.Vector3;
+  jawY0: number;
 }
 
 function displaced(geo: THREE.BufferGeometry, amt: number, seed: number) {
@@ -119,11 +122,12 @@ export class FoodBits {
       mesh.userData.food = true;
       mesh.userData.normal = nWorld;
       this.group.add(mesh);
-      this.bits.push({ kind, mesh, tooth, hp: kind === 'spinach' || kind === 'chocolate' ? 1.4 : 0.9, falling: false, vel: new THREE.Vector3(), spin: new THREE.Vector3(), age: 0 });
+      this.bits.push({ kind, mesh, tooth, hp: kind === 'spinach' || kind === 'chocolate' ? 1.4 : 0.9, falling: false, vel: new THREE.Vector3(), spin: new THREE.Vector3(), age: 0, rest: mesh.position.clone(), jawY0: parent.position.y });
     }
   }
 
-  meshes() { return this.bits.filter(b => !b.falling).map(b => b.mesh); }
+  /** Bits still stuck on a jaw that is on screen. */
+  meshes() { return this.bits.filter(b => !b.falling && b.tooth.mesh.parent!.visible).map(b => b.mesh); }
 
   private wp = new THREE.Vector3();
 
@@ -157,7 +161,14 @@ export class FoodBits {
 
   update(dt: number) {
     for (const b of this.bits) {
-      if (!b.falling || !b.mesh.parent) continue;
+      if (!b.falling) {
+        // ride along when the top or bottom jaw slides away (top/bottom views), and hide with it
+        const jaw = b.tooth.mesh.parent!;
+        b.mesh.position.set(b.rest.x, b.rest.y + jaw.position.y - b.jawY0, b.rest.z);
+        b.mesh.visible = jaw.visible;
+        continue;
+      }
+      if (!b.mesh.parent) continue;
       b.age += dt;
       b.vel.y -= 260 * dt;
       b.mesh.position.addScaledVector(b.vel, dt);

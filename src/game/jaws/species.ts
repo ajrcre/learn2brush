@@ -34,7 +34,7 @@ export interface Species {
   /** a second row of baby teeth lying folded back behind the first (sharks) */
   spareRow?: boolean;
   /** the animal's head around the jaws (see heads.ts) */
-  head?: 'alligator';
+  head?: 'alligator' | 'goat';
 }
 
 const HUMAN_ARCH: [number, number][] = [
@@ -104,9 +104,10 @@ export const SPECIES: Record<string, Species> = {
     gap: 0.5,
     open: 7.2,
     zShift: 10.5,
-    frame: { w: 56, h: 46 },
+    frame: { w: 60, h: 64 },
     center: [0, 0, -4],
     frontYaw: 0.45,
+    head: 'goat',
     enamel: '#f6ecd2',
     gum: { base: '#d98088', ridge: '#eda2a6', margin: '#d36f7e', pigment: 0.65, pigmentColor: '#3a2a2a' },
     gumDepth: 6.5,

@@ -227,3 +227,216 @@ export function buildAlligatorHead(upper: JawArch, lower: JawArch) {
 
   return meshes;
 }
+
+export interface FurColors {
+  coat: string;
+  /** colour towards the tip of the muzzle */
+  muzzle: string;
+  /** white stripe down the middle of the face (top surfaces only), from `blazeFrom` (z) forwards */
+  blaze?: string;
+}
+
+export interface FurOptions {
+  /** the coat blends into the muzzle colour over the last `muzzleLen` mm before `tipZ` */
+  tipZ?: number;
+  muzzleLen?: number;
+  blazeFrom?: number;
+  blazeWidth?: number;
+}
+
+/** Short soft fur: a fine strand texture, matte with a fuzzy sheen; optional pale muzzle and white blaze. */
+export function createFurMaterial(c: FurColors, o: FurOptions = {}) {
+  const m = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.82, sheen: 0.8, sheenRoughness: 0.55, sheenColor: new THREE.Color(c.coat).lerp(new THREE.Color('#ffffff'), 0.5), specularIntensity: 0.3 });
+  const u = {
+    uCoat: { value: new THREE.Color(c.coat) }, uMuzzle: { value: new THREE.Color(c.muzzle) }, uBlaze: { value: new THREE.Color(c.blaze ?? c.coat) },
+    uTipZ: { value: o.tipZ ?? 1e4 }, uMuzzleLen: { value: o.muzzleLen ?? 1 },
+    uBlazeFrom: { value: c.blaze ? o.blazeFrom ?? -1e4 : 1e4 }, uBlazeWidth: { value: o.blazeWidth ?? 2.5 },
+  };
+  m.customProgramCacheKey = () => 'l2b-fur';
+  m.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, u);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vFurPos; varying vec3 vFurN;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFurPos = position; vFurN = normal;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+uniform vec3 uCoat; uniform vec3 uMuzzle; uniform vec3 uBlaze;
+uniform float uTipZ; uniform float uMuzzleLen; uniform float uBlazeFrom; uniform float uBlazeWidth;
+varying vec3 vFurPos; varying vec3 vFurN;
+${GLITTER_GLSL}
+float l2b_fur;`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+{
+  vec3 p = vFurPos;
+  // fine strands running front-to-back, plus a little clumping
+  l2b_fur = l2b_noise(vec3(p.x * 2.6, p.y * 2.6, p.z * 0.55)) * 0.65 + l2b_noise(p * 1.3) * 0.35;
+  vec3 col = uCoat * (0.94 + 0.12 * l2b_fbm(p * 0.12));
+  float edge = uBlazeWidth * (0.85 + 0.3 * l2b_noise(p * 0.5));
+  float blaze = (1.0 - smoothstep(edge, edge + 0.9, abs(p.x))) * smoothstep(0.2, 0.45, normalize(vFurN).y) * smoothstep(uBlazeFrom, uBlazeFrom + 3.0, p.z);
+  col = mix(col, uBlaze, blaze);
+  col = mix(col, uMuzzle, smoothstep(uTipZ - uMuzzleLen, uTipZ - uMuzzleLen * 0.35, p.z));
+  col *= 0.86 + 0.2 * l2b_fur;
+  diffuseColor.rgb = col;
+}`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+normal = l2b_bump(normal, -vViewPosition, l2b_fur, 0.35);`);
+  };
+  return m;
+}
+
+/** A horn bud: a tube along `path` that tapers to a rounded tip, with growth rings. */
+function horn(path: THREE.Curve<THREE.Vector3>, r0: number, mat: THREE.Material) {
+  const T = 28, R = 14;
+  const g = new THREE.TubeGeometry(path, T, 1, R, false);
+  const pos = g.getAttribute('position');
+  const c = new THREE.Vector3(), v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    const s = Math.floor(i / (R + 1)) / T;
+    path.getPointAt(s, c);
+    const taper = r0 * (1 - 0.82 * Math.pow(s, 0.9)) * (1 + 0.06 * Math.sin(s * 40));
+    v.fromBufferAttribute(pos, i).sub(c).multiplyScalar(taper).add(c);
+    pos.setXYZ(i, v.x, v.y, v.z);
+  }
+  g.computeVertexNormals();
+  const m = new THREE.Mesh(g, mat);
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(r0 * 0.19, 10, 8), mat);
+  tip.position.copy(path.getPointAt(1));
+  m.add(tip);
+  return m;
+}
+
+/**
+ * Goat kid (Boer-style colours: reddish-brown head, white blaze, pale muzzle).
+ * A long muzzle around the teeth leads back to a rounded skull that carries the eyes (sideways-slot
+ * pupils), long hanging ears and little horn buds; a goatee hangs under the chin. Like the alligator,
+ * every part stays above the top gum line or below the bottom one, so all teeth can still be brushed.
+ */
+export function buildGoatHead(upper: JawArch, lower: JawArch) {
+  const meshes: THREE.Mesh[] = [];
+  const add = (group: THREE.Group, ...ms: THREE.Mesh[]) => { for (const m of ms) { group.add(tag(m)); meshes.push(m); } };
+  const colors: FurColors = { coat: '#a9653b', muzzle: '#efe4d6', blaze: '#f8f2e8' };
+
+  // muzzle around the top teeth; the offset clears the thick dental pad and the wide cheek teeth
+  const top: HeadOptions = { offset: 5.4, back: 10, lip: 2.0, wall: 2.6, domeFront: 7.5, domeBack: 12, palate: 2.4 };
+  const uPts = outline(upper, top);
+  let tipZ = -Infinity, backZ = Infinity;
+  for (const p of uPts) { tipZ = Math.max(tipZ, p.y); backZ = Math.min(backZ, p.y); }
+  const fur = createFurMaterial(colors, { tipZ, muzzleLen: 10, blazeFrom: backZ + 6, blazeWidth: 2.6 });
+  const u = shell(uPts, top, upper.away, fur);
+  const mouth = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.55, clearcoat: 0.3, side: THREE.DoubleSide });
+  const palate = mouthCap(uPts, top.palate * upper.away, mouth, top.back, ['#e7a2a6', '#3a1416']);
+  add(upper.group, u.mesh, palate);
+  const halfAt = (pts: THREE.Vector2[], z: number) => Math.max(...pts.filter(p => Math.abs(p.y - z) < 2.5).map(p => Math.abs(p.x)));
+  const roofY = (z: number) => top.lip + top.wall + THREE.MathUtils.lerp(top.domeBack, top.domeFront, THREE.MathUtils.smoothstep(z, u.zMin, u.zMax));
+
+  // rounded skull at the back, sitting on the muzzle (its flat underside stays well above the gum line)
+  const skullHalf = halfAt(uPts, backZ + 6) + 1.5;
+  const skullR = new THREE.Vector3(skullHalf, 10.5, 15);
+  const skullC = new THREE.Vector3(0, roofY(backZ + 8) - 2, backZ + 11);
+  const floorY = top.lip + top.wall * 0.6;
+  const skullGeo = new THREE.SphereGeometry(1, 48, 32);
+  {
+    const sp = skullGeo.getAttribute('position');
+    for (let i = 0; i < sp.count; i++) {
+      const y = Math.max(skullC.y + sp.getY(i) * skullR.y, floorY);
+      sp.setXYZ(i, skullC.x + sp.getX(i) * skullR.x, y, skullC.z + sp.getZ(i) * skullR.z);
+    }
+    skullGeo.computeVertexNormals();
+  }
+  add(upper.group, new THREE.Mesh(skullGeo, fur));
+  /** point on the skull surface in direction d (from its centre) */
+  const onSkull = (d: THREE.Vector3, lift = 0) => {
+    const n = d.clone().normalize();
+    return skullC.clone().add(new THREE.Vector3(n.x * skullR.x, n.y * skullR.y, n.z * skullR.z)).addScaledVector(n, lift);
+  };
+
+  // nose pad on the front of the muzzle: pink-grey, a little shiny, slanted slit nostrils and the split lip
+  const noseMat = new THREE.MeshPhysicalMaterial({ color: '#7d6262', roughness: 0.38, clearcoat: 0.5, clearcoatRoughness: 0.3 });
+  const holeMat = new THREE.MeshBasicMaterial({ color: '#2a1517' });
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 18), noseMat);
+  nose.scale.set(3.6, 2.5, 1.3);
+  nose.position.set(0, top.lip + top.wall + top.domeFront * 0.42, tipZ - 0.9);
+  for (const s of [-1, 1]) {
+    const hole = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 10), holeMat);
+    hole.scale.set(0.17, 0.42, 0.16);
+    hole.position.set(s * 0.45, 0.12, 0.9);
+    hole.rotation.z = -s * 0.55; // "\ /": top ends apart
+    nose.add(hole);
+  }
+  const split = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 6), holeMat);
+  split.scale.set(0.05, 0.42, 0.08);
+  split.position.set(0, -0.68, 0.74);
+  nose.add(split);
+  add(upper.group, nose);
+
+  // big golden eyes on the front corners of the skull, looking out sideways and a little forwards
+  const iris = new THREE.MeshPhysicalMaterial({ color: '#e7ad2f', roughness: 0.12, clearcoat: 1, emissive: '#6a4300', emissiveIntensity: 0.3 });
+  const pupilMat = new THREE.MeshBasicMaterial({ color: '#141010' });
+  const white = new THREE.MeshBasicMaterial({ color: '#ffffff' });
+  for (const s of [-1, 1]) {
+    const dir = new THREE.Vector3(s * 0.78, 0.32, 0.55);
+    const look = new THREE.Vector3(s, 0.12, 0.62).normalize();
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(3.2, 28, 18), iris);
+    eye.position.copy(onSkull(dir, -1.1));
+    eye.lookAt(eye.position.clone().add(look)); // +z = gaze
+    const pupil = new THREE.Mesh(new THREE.CapsuleGeometry(0.62, 2.7, 4, 12), pupilMat);
+    pupil.rotation.z = Math.PI / 2; // goats' pupils lie sideways
+    pupil.scale.set(1, 1, 0.6);
+    pupil.position.set(0, 0, 3.02);
+    const glint = new THREE.Mesh(new THREE.SphereGeometry(0.55, 10, 8), white);
+    glint.position.set(-0.9 * s, 1.2, 2.8);
+    eye.add(pupil, glint);
+    // furry lid over the top of the eye
+    const lid = new THREE.Mesh(new THREE.SphereGeometry(3.45, 24, 12, 0, Math.PI * 2, 0, Math.PI * 0.24), fur);
+    lid.rotation.x = -0.1;
+    eye.add(lid);
+    add(upper.group, eye);
+  }
+
+  // long ears hanging down the sides of the head, pink inside
+  const earInner = new THREE.MeshPhysicalMaterial({ color: '#e9aaa2', roughness: 0.6, sheen: 0.4, sheenColor: new THREE.Color('#ffd6cc') });
+  const earGeo = new THREE.SphereGeometry(1, 28, 16);
+  earGeo.translate(0, -1, 0); // hangs from its top
+  for (const s of [-1, 1]) {
+    const ear = new THREE.Mesh(earGeo, fur);
+    ear.scale.set(1.7, 11, 4.2);
+    const inner = new THREE.Mesh(earGeo, earInner);
+    inner.scale.set(0.5, 0.86, 0.72);
+    inner.position.set(-0.55 * s, -0.08, 0.1); // the side facing the head
+    ear.add(inner);
+    ear.position.copy(onSkull(new THREE.Vector3(s, 0.35, -0.15), -1.2));
+    ear.rotation.set(-0.25, 0, s * 0.62); // hang outwards and slightly back
+    add(upper.group, ear);
+  }
+
+  // little horn buds on top, curving back
+  const hornMat = new THREE.MeshPhysicalMaterial({ color: '#cbb894', roughness: 0.5, clearcoat: 0.25 });
+  for (const s of [-1, 1]) {
+    const base = onSkull(new THREE.Vector3(s * 0.32, 0.9, 0.1), -0.8);
+    const path = new THREE.QuadraticBezierCurve3(base, base.clone().add(new THREE.Vector3(s * 0.5, 4.2, -0.4)), base.clone().add(new THREE.Vector3(s * 1.4, 5.4, -4.4)));
+    add(upper.group, horn(path, 1.9, hornMat));
+  }
+
+  // bottom jaw: a rounded chin with a pale front, then the goatee
+  const bot: HeadOptions = { offset: 4.6, back: 8, lip: 2.0, wall: 2.4, domeFront: 4, domeBack: 5.5, palate: 2.6 };
+  const lPts = outline(lower, bot);
+  let chinZ = -Infinity;
+  for (const p of lPts) chinZ = Math.max(chinZ, p.y);
+  const chinFur = createFurMaterial(colors, { tipZ: chinZ, muzzleLen: 9 });
+  const l = shell(lPts, bot, lower.away, chinFur);
+  const floor = mouthCap(lPts, bot.palate * lower.away, mouth, bot.back, ['#e7a2a6', '#3a1416']);
+  add(lower.group, l.mesh, floor);
+
+  const beardMat = createFurMaterial({ coat: '#8a4f2c', muzzle: '#8a4f2c' });
+  const beardZ = l.zMax - 8;
+  const chinY = -(bot.lip + bot.wall + THREE.MathUtils.lerp(bot.domeBack, bot.domeFront, THREE.MathUtils.smoothstep(beardZ, l.zMin, l.zMax)));
+  const tufts: [number, number, number, number][] = [[0, 0, 0, 1.35], [-1.2, -1.0, -0.6, 1.1], [1.2, -0.9, -0.5, 1.1], [0, -2.6, -1.1, 0.9]];
+  for (const [x, dy, dz, k] of tufts) {
+    const tuft = new THREE.Mesh(new THREE.ConeGeometry(1.7 * k, 8.5 * k, 14, 4), beardMat);
+    tuft.rotation.x = Math.PI + 0.35; // point down, swept back a bit
+    tuft.position.set(x, chinY + dy - 3.6 * k, beardZ + dz);
+    add(lower.group, tuft);
+  }
+
+  return meshes;
+}
