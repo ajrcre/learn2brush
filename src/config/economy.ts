@@ -49,7 +49,7 @@ export const REWARDS = {
 
 /** Items still waiting for approval only show when the game runs with ?review */
 export const REVIEW_MODE = typeof location !== 'undefined' && new URLSearchParams(location.search).has('review');
-/** The animal jaws are built but still in review: playable with ?review, "coming soon" otherwise. */
+/** Animal jaws still in review: playable with ?review, "coming soon" otherwise. (The alligator is live.) */
 const JAW_SOON = !REVIEW_MODE;
 
 export const CATALOG: Item[] = [
@@ -57,7 +57,7 @@ export const CATALOG: Item[] = [
   { id: 'jaw_human', cat: 'jaw', price: 0, name: { en: 'Kid teeth', he: 'שִׁנַּיִם שֶׁל יְלָדִים' }, colors: ['#ffffff'], emoji: '😁' },
   { id: 'jaw_goat', cat: 'jaw', price: 150, name: { en: 'Goat', he: 'עֵז' }, colors: ['#e8dcc8'], emoji: '🐐', comingSoon: JAW_SOON },
   { id: 'jaw_lion', cat: 'jaw', price: 350, name: { en: 'Lion', he: 'אַרְיֵה' }, colors: ['#e3a948'], emoji: '🦁', comingSoon: JAW_SOON },
-  { id: 'jaw_alligator', cat: 'jaw', price: 700, name: { en: 'Alligator', he: 'תַּנִּין' }, colors: ['#5f8f3e'], emoji: '🐊', comingSoon: JAW_SOON },
+  { id: 'jaw_alligator', cat: 'jaw', price: 700, name: { en: 'Alligator', he: 'תַּנִּין' }, colors: ['#5f8f3e'], emoji: '🐊' },
   { id: 'jaw_shark', cat: 'jaw', price: 1200, name: { en: 'Shark', he: 'כָּרִישׁ' }, colors: ['#6b8fa8'], emoji: '🦈', comingSoon: JAW_SOON },
   // brush type
   { id: 'type_manual', cat: 'brushType', price: 0, name: { en: 'Classic brush', he: 'מִבְרֶשֶׁת רְגִילָה' }, colors: ['#ffffff'], emoji: '🪥' },
