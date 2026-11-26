@@ -44,3 +44,9 @@ export function looks(p: Profile, override: Partial<Record<Category, string>> = 
     },
   };
 }
+
+/** Which jaws to show: the equipped (or tried-on) animal, or kid teeth while that animal isn't available yet. */
+export function jawFor(p: Profile, override?: string): string {
+  const it = item(override ?? p.equipped.jaw ?? DEFAULT_EQUIPPED.jaw);
+  return it && it.cat === 'jaw' && isVisible(it) && !it.comingSoon ? it.id : DEFAULT_EQUIPPED.jaw;
+}
