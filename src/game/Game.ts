@@ -29,6 +29,8 @@ export interface GameEvents {
   hints: (kind: HintKind | null) => void;
   /** the jaws are turning by themselves to show a missed spot */
   autoTurn: () => void;
+  /** harder level: the tongue knocked the brush off a tooth ('bump') or was brushed and hides ('tickle') */
+  tongue: (what: 'bump' | 'tickle') => void;
 }
 
 type Handlers = { [K in keyof GameEvents]?: GameEvents[K][] };
@@ -46,6 +48,11 @@ export class Game {
   readonly helpers = new HelperArrows(3);
   readonly bugs = new SugarBugs();
   private idle = 0;
+  /** harder level: the last tap landed on the tongue; the tongue knocked the brush off (seconds left) */
+  private hitTongue = false;
+  private knock = 0;
+  private bumpCooldown = 0;
+  private knockPos = new THREE.Vector3();
   private hintState: 'none' | 'turning' | 'shown' = 'none';
   private turnTimer = 0;
   private tube = createTube('#3fb6ff');
@@ -277,10 +284,11 @@ export class Game {
   /** Raycast teeth / gums / food. */
   private pick(): boolean {
     this.ray.setFromCamera(this.ndc, this.stage.camera);
-    const targets: THREE.Object3D[] = [...this.jaws.toothMeshes.filter(m => m.parent!.visible), ...this.jaws.gums.filter(g => g.parent!.visible), ...this.jaws.occluders.filter(o => o.parent!.visible), ...this.food.meshes()];
+    const targets: THREE.Object3D[] = [...this.jaws.toothMeshes.filter(m => m.parent!.visible), ...this.jaws.gums.filter(g => g.parent!.visible), ...this.jaws.occluders.filter(o => o.parent!.visible), ...this.food.meshes(), ...this.jaws.blockers()];
     const hits = this.ray.intersectObjects(targets, false);
     const h = hits[0];
-    if (!h || !h.face || h.object.userData.head) return false; // the head can't be brushed (drag turns it)
+    this.hitTongue = !!h?.object.userData.tongue;
+    if (!h || !h.face || (h.object.userData.head && !this.hitTongue)) return false; // the head can't be brushed (drag turns it)
     this.hitPoint.copy(h.point);
     this.hitNormal.copy(h.face.normal).transformDirection(h.object.matrixWorld);
     if (this.hitNormal.dot(this.ray.ray.direction) > 0) this.hitNormal.negate();
@@ -387,8 +395,9 @@ export class Game {
         (t.mesh.material as THREE.MeshPhysicalMaterial & { userData: { uniforms: { uGlow: { value: number } } } }).userData.uniforms.uGlow.value = Math.sin(t.glow * Math.PI) * 0.8;
       }
     }
-    // Venom's tongue slithers out whenever no one is brushing (and is pulled in while they are)
-    this.jaws.update(dt, this.phase !== 'brush');
+    // Venom's tongue: out and writhing when no one is brushing; while brushing it is tucked away, or,
+    // on the harder level, keeps coming out to get in the way
+    this.jaws.update(dt, this.phase === 'brush' ? (this.jaws.species.pester ? 'pester' : 'in') : this.phase === 'paste' ? 'in' : 'show');
     this.foam.update(dt);
     this.food.update(dt);
     this.sparkles.update(dt);
@@ -463,10 +472,29 @@ export class Game {
     let target: THREE.Vector3;
     let normal: THREE.Vector3;
     this.contact = false;
-    if (this.mode === 'brush' && this.pointerDown && this.pick()) {
+    this.knock = Math.max(0, this.knock - dt);
+    this.bumpCooldown = Math.max(0, this.bumpCooldown - dt);
+    if (this.knock > 0) {
+      // knocked off by the tongue: the brush bounces away from the tooth for a moment
+      target = this.knockPos;
+      normal = this.hitNormal;
+    } else if (this.mode === 'brush' && this.pointerDown && this.pick()) {
       this.contact = true;
       target = this.hitPoint;
       normal = this.hitNormal;
+      const tongue = this.jaws.tongue;
+      if (tongue && this.hitTongue) {
+        // brushing the tongue tickles it: it shakes and hides for a while
+        if (tongue.tickle()) { this.sparkles.burst(this.hitPoint.clone(), 6, 6); this.emit('tongue', 'tickle'); }
+      } else if (tongue && this.bumpCooldown <= 0 && tongue.near(this.hitPoint, this.hitNormal)) {
+        // the tongue sweeps over the spot being brushed and knocks the brush off
+        this.contact = false;
+        this.knock = 0.7;
+        this.bumpCooldown = 2;
+        this.knockPos.copy(this.hitPoint).addScaledVector(this.hitNormal, 9).add(this.tmpV.set(0, 7, 0));
+        target = this.knockPos;
+        this.emit('tongue', 'bump');
+      }
     } else {
       // park the brush at the lower right, near the jaws' depth, bristles facing the jaws
       const ndcPark = new THREE.Vector3(cam.aspect < 0.9 ? 0.55 : 0.62, cam.aspect < 0.9 ? -0.45 : -0.35, 0.5).unproject(cam);
@@ -506,13 +534,15 @@ export class Game {
       // paste smears into foam on first contact
       if (this.paste.mesh.visible) this.paste.mesh.visible = false;
       const electric = this.brush.look.type === 'electric';
-      if (this.hitIsTooth) {
+      if (this.hitIsTooth && !this.hitTongue) {
         // tuned so a full clean takes about a minute for a 5-7 year old
         const rate = (electric ? 4.6 : 3.6) * (0.8 + 0.4 * this.pointerSpeed);
         this.jaws.clean(this.hitPoint, this.hitNormal, electric ? 7.5 : 8, rate * dt);
       }
-      this.food.brush(this.hitPoint, 8, dt * (electric ? 3.2 : 2.4), this.stage.scene);
-      this.bugs.brush(this.hitPoint, 7.5);
+      if (!this.hitTongue) {
+        this.food.brush(this.hitPoint, 8, dt * (electric ? 3.2 : 2.4), this.stage.scene);
+        this.bugs.brush(this.hitPoint, 7.5);
+      }
       const intensity = this.paste.consume(dt, 0.011);
       const lp = this.content.worldToLocal(this.hitPoint.clone());
       const inv = new THREE.Matrix4().copy(this.content.matrixWorld).invert();
@@ -602,7 +632,7 @@ export class Game {
   private visibleSpot(c: { mesh: THREE.Object3D; space: THREE.Object3D; spots: { p: THREE.Vector3; n: THREE.Vector3 }[] }) {
     const cam = this.stage.camera;
     if (!c.mesh.parent?.visible) return null;
-    const targets: THREE.Object3D[] = [...this.jaws.toothMeshes.filter(m => m.parent!.visible), ...this.jaws.gums.filter(g => g.parent!.visible), ...this.jaws.occluders.filter(o => o.parent!.visible), ...this.food.meshes()];
+    const targets: THREE.Object3D[] = [...this.jaws.toothMeshes.filter(m => m.parent!.visible), ...this.jaws.gums.filter(g => g.parent!.visible), ...this.jaws.occluders.filter(o => o.parent!.visible), ...this.food.meshes(), ...this.jaws.blockers()];
     for (const local of c.spots) {
       const sp = { p: local.p.clone().applyMatrix4(c.space.matrixWorld), n: local.n.clone().transformDirection(c.space.matrixWorld) };
       const toCam = cam.position.clone().sub(sp.p).normalize();

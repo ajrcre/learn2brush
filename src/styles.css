@@ -171,6 +171,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: 0; }
 .slide .emoji { font-size: 76px; line-height: 1; }
 .slide .name { font-size: 16px; font-weight: 800; text-align: center; padding: 0 6px; }
 .slide .lock-badge { position: absolute; top: 8px; inset-inline-end: 10px; font-size: 22px; }
+.slide .hard-badge { position: absolute; top: 8px; inset-inline-start: 8px; font-size: 13px; font-weight: 800; padding: 2px 7px; border-radius: 999px; background: #2a2d3a; color: #fff; }
 .slide.locked .art { filter: saturate(0.75); }
 .swatch.lg { width: 84px; height: 84px; }
 .swatch.lg.sparkle::after { font-size: 34px; }

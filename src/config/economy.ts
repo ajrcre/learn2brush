@@ -26,6 +26,8 @@ export interface Item {
   /** accent colour for fins / plates / grip; head colour */
   accent?: string;
   head?: string;
+  /** a harder level (shown with a badge in the shop) */
+  hard?: boolean;
   /** 'review' = new item waiting for approval: hidden unless the game runs with ?review */
   status?: 'review';
   /** the item exists but its upgraded look (pattern/glitter) is still in review */
@@ -58,7 +60,7 @@ export const CATALOG: Item[] = [
   { id: 'jaw_goat', cat: 'jaw', price: 150, name: { en: 'Goat', he: 'עֵז' }, colors: ['#e8dcc8'], emoji: '🐐' },
   { id: 'jaw_lion', cat: 'jaw', price: 350, name: { en: 'Lion', he: 'אַרְיֵה' }, colors: ['#e3a948'], emoji: '🦁', comingSoon: JAW_SOON },
   { id: 'jaw_alligator', cat: 'jaw', price: 700, name: { en: 'Alligator', he: 'תַּנִּין' }, colors: ['#5f8f3e'], emoji: '🐊' },
-  { id: 'jaw_venom', cat: 'jaw', price: 900, name: { en: 'Venom', he: 'וֶנוֹם' }, colors: ['#15171f'], emoji: '👅', comingSoon: JAW_SOON },
+  { id: 'jaw_venom', cat: 'jaw', price: 900, name: { en: 'Venom', he: 'וֶנוֹם' }, colors: ['#15171f'], emoji: '👅', hard: true, comingSoon: JAW_SOON },
   { id: 'jaw_shark', cat: 'jaw', price: 1200, name: { en: 'Shark', he: 'כָּרִישׁ' }, colors: ['#6b8fa8'], emoji: '🦈', comingSoon: JAW_SOON },
   // brush type
   { id: 'type_manual', cat: 'brushType', price: 0, name: { en: 'Classic brush', he: 'מִבְרֶשֶׁת רְגִילָה' }, colors: ['#ffffff'], emoji: '🪥' },

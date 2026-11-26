@@ -3,7 +3,7 @@ import { buildToothGeometry, rng, SIDE_CHEWING, SIDE_INNER, SIDE_NONE, SIDE_OUTE
 import { createEnamelMaterial, createGumMaterial } from '../materials';
 import { speciesFor, type Species } from './species';
 import { buildAlligatorHead, buildGoatHead, buildLionHead, buildVenomHead } from './heads';
-import { Tongue } from './tongue';
+import { Tongue, type TongueMode } from './tongue';
 
 /** how strongly the biting edge looks translucent */
 const INCISAL: Partial<Record<ToothKind, number>> = { incisor: 1, canine: 0.6, fang: 0.7, cone: 0.6, blade: 0.8 };
@@ -96,12 +96,19 @@ export class Jaws {
       frontZ: lowerArch.getPointAt(0.5).z + sp.lower[0].t / 2,
       lipY,
       floor: 2.6,
+      lowerArch,
+      upperArch: this.arches.upper!,
     });
   }
 
-  /** Per-frame animation (the tongue). `tongueOut`: let it slither out (it hides while teeth are being brushed). */
-  update(dt: number, tongueOut: boolean) {
-    this.tongue?.update(dt, tongueOut);
+  /** Per-frame animation (the tongue, see TongueMode). */
+  update(dt: number, tongue: TongueMode) {
+    this.tongue?.update(dt, tongue);
+  }
+
+  /** Things in the way of the brush right now (the pestering tongue): taps hit them instead of the teeth. */
+  blockers(): THREE.Object3D[] {
+    return this.tongue?.blocking && this.lower.visible ? [this.tongue.mesh] : [];
   }
 
   /** front-to-back size of the arch (mm), for framing the top and bottom views */

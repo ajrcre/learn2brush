@@ -190,6 +190,7 @@ export function Customizer({ game, mode, top }: { game: Game; mode: 'choose' | '
                 <span className="art">{it.emoji && (it.cat === 'jaw' || it.cat === 'brushType' || it.cat === 'shape') ? <span className="emoji">{it.emoji}</span> : <Swatch it={it} size="lg" />}</span>
                 <span className="name">{it.name[lang]}</span>
                 {!o && <span className="lock-badge">🔒</span>}
+                {it.hard && <span className="hard-badge">💪 {t('hard')}</span>}
               </button>
             );
           })}

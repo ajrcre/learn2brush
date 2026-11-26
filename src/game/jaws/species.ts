@@ -37,6 +37,8 @@ export interface Species {
   head?: 'alligator' | 'goat' | 'lion' | 'venom';
   /** a long tongue that slides out of the mouth and writhes around when nobody is brushing (see tongue.ts) */
   tongue?: boolean;
+  /** harder level: while brushing, the tongue keeps coming out and getting in the way */
+  pester?: boolean;
 }
 
 const HUMAN_ARCH: [number, number][] = [
@@ -224,6 +226,7 @@ export const SPECIES: Record<string, Species> = {
     frontYaw: 0.2,
     head: 'venom',
     tongue: true,
+    pester: true,
     enamel: '#fbfaf6',
     gum: { base: '#8c2f42', ridge: '#a8475a', margin: '#7a2436', pigment: 0.7, pigmentColor: '#1c0a10' },
     gumDepth: 6.5,
