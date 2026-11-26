@@ -648,3 +648,150 @@ export function buildLionHead(upper: JawArch, lower: JawArch, open = 10) {
 
   return meshes;
 }
+
+/** Glossy black symbiote skin: wet clear-coat shine, faint blue sheen, and stringy sinews stretched over it. */
+export function createSymbioteMaterial() {
+  const m = new THREE.MeshPhysicalMaterial({
+    color: 0xffffff, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.1,
+    sheen: 0.25, sheenRoughness: 0.4, sheenColor: new THREE.Color('#3d5590'), specularIntensity: 0.7,
+  });
+  m.customProgramCacheKey = () => 'l2b-symbiote';
+  m.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vSymPos;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSymPos = position;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+varying vec3 vSymPos;
+${GLITTER_GLSL}
+float l2b_sinew;`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+{
+  vec3 p = vSymPos;
+  // ridges of a warped noise: thin stringy sinews running mostly up and down
+  float warp = l2b_fbm(p * 0.08 + 5.0);
+  float r = 1.0 - abs(l2b_noise(vec3(p.x * 0.3, p.y * 0.09, p.z * 0.3) + warp * 3.0) * 2.0 - 1.0);
+  l2b_sinew = pow(r, 8.0);
+  vec3 col = mix(vec3(0.008, 0.009, 0.013), vec3(0.03, 0.034, 0.05), l2b_sinew * 0.6 + warp * 0.2);
+  diffuseColor.rgb = col;
+}`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+normal = l2b_bump(normal, -vViewPosition, l2b_sinew, 0.22);`);
+  };
+  return m;
+}
+
+/** Split the triangles of a non-indexed geometry until no edge is longer than `maxEdge` (positions only). */
+function subdivide(geo: THREE.BufferGeometry, maxEdge: number) {
+  const src = geo.getAttribute('position');
+  const out: number[] = [];
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  const split = (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, depth: number) => {
+    const ab = a.distanceTo(b), bc = b.distanceTo(c), ca = c.distanceTo(a);
+    const m = Math.max(ab, bc, ca);
+    if (m <= maxEdge || depth > 10) { out.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z); return; }
+    // cut the longest edge in half
+    if (m === ab) { const d = a.clone().lerp(b, 0.5); split(a, d, c, depth + 1); split(d, b, c, depth + 1); }
+    else if (m === bc) { const d = b.clone().lerp(c, 0.5); split(a, b, d, depth + 1); split(a, d, c, depth + 1); }
+    else { const d = c.clone().lerp(a, 0.5); split(a, b, d, depth + 1); split(d, b, c, depth + 1); }
+  };
+  for (let i = 0; i < src.count; i += 3) split(a.fromBufferAttribute(src, i).clone(), b.fromBufferAttribute(src, i + 1).clone(), c.fromBufferAttribute(src, i + 2).clone(), 0);
+  geo.dispose();
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(out, 3));
+  return g;
+}
+
+/** Bend a flat shape (x, y in mm, extruded along z) onto an ellipsoid, centred on direction `d`. */
+function decalOnEllipsoid(geo: THREE.BufferGeometry, c: THREE.Vector3, r: THREE.Vector3, d: THREE.Vector3, lift: number) {
+  const n = d.clone().normalize();
+  const xAxis = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), n).normalize();
+  const yAxis = new THREE.Vector3().crossVectors(n, xAxis);
+  const centre = c.clone().add(new THREE.Vector3(n.x * r.x, n.y * r.y, n.z * r.z));
+  const pos = geo.getAttribute('position');
+  const p = new THREE.Vector3(), u = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    p.copy(centre).addScaledVector(xAxis, pos.getX(i)).addScaledVector(yAxis, pos.getY(i)).sub(c);
+    u.set(p.x / r.x, p.y / r.y, p.z / r.z).normalize(); // direction on the unit sphere
+    p.set(u.x * r.x, u.y * r.y, u.z * r.z).add(c).addScaledVector(u, lift + pos.getZ(i));
+    pos.setXYZ(i, p.x, p.y, p.z);
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/**
+ * Venom: a big round glossy-black head with huge white slanted eyes, and a mouth that stretches
+ * almost from ear to ear. The tongue is separate (tongue.ts). Like the other heads, the skin only
+ * grows away from the gum lines, so every tooth can still be brushed.
+ */
+export function buildVenomHead(upper: JawArch, lower: JawArch) {
+  const meshes: THREE.Mesh[] = [];
+  const add = (group: THREE.Group, ...ms: THREE.Mesh[]) => { for (const m of ms) { group.add(tag(m)); meshes.push(m); } };
+  const skin = createSymbioteMaterial();
+  const mouth = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.7, clearcoat: 0.15, side: THREE.DoubleSide });
+  const mouthColors: [string, string] = ['#6a1726', '#0c0206'];
+
+  // thin stretched lips hugging the top teeth
+  const top: HeadOptions = { offset: 4.2, back: 2.5, lip: 1.8, wall: 2.2, domeFront: 4.5, domeBack: 7, palate: 2.4 };
+  const uPts = outline(upper, top);
+  let tipZ = -Infinity, backZ = Infinity;
+  for (const p of uPts) { tipZ = Math.max(tipZ, p.y); backZ = Math.min(backZ, p.y); }
+  const u = shell(uPts, top, upper.away, skin);
+  const palate = mouthCap(uPts, top.palate * upper.away, mouth, top.back, mouthColors);
+  add(upper.group, u.mesh, palate);
+
+  // big round skull over the whole top jaw: as wide as the lips, so it grows straight out of them
+  const floorY = top.lip + top.wall * 0.7;
+  const halfMax = Math.max(...uPts.map(p => Math.abs(p.x)));
+  const skullR = new THREE.Vector3(halfMax + 0.6, 24, (tipZ - backZ) / 2 + 7);
+  const skullC = new THREE.Vector3(0, floorY + 2.5, (tipZ + backZ) / 2 - 5);
+  const skullGeo = new THREE.SphereGeometry(1, 56, 36);
+  {
+    const sp = skullGeo.getAttribute('position');
+    for (let i = 0; i < sp.count; i++) {
+      // flat underside stays above the gum line; the front of the face is a little flatter
+      const z = sp.getZ(i);
+      const y = Math.max(skullC.y + sp.getY(i) * skullR.y, floorY);
+      sp.setXYZ(i, skullC.x + sp.getX(i) * skullR.x, y, skullC.z + z * skullR.z * (z > 0 ? 0.92 : 1));
+    }
+    skullGeo.computeVertexNormals();
+  }
+  add(upper.group, new THREE.Mesh(skullGeo, skin));
+
+  // the eyes: big white slanted shapes, pointed towards the nose, sweeping up and out to a wide tip
+  const eyeMat = new THREE.MeshPhysicalMaterial({ color: '#f2f4f8', roughness: 0.55, clearcoat: 0.25, clearcoatRoughness: 0.4, emissive: '#ffffff', emissiveIntensity: 0.22 });
+  const shape = new THREE.Shape();
+  shape.moveTo(-5.2, -2.6); // inner point, low near the middle of the face
+  shape.bezierCurveTo(-2.5, 0.4, 2.5, 4.6, 7.6, 7.4); // top edge sweeping up and out
+  shape.bezierCurveTo(9.6, 3.0, 8.2, -2.8, 4.6, -4.4); // round outer end
+  shape.bezierCurveTo(1.4, -5.6, -2.4, -4.4, -5.2, -2.6); // bottom edge back to the point
+  const skullFront = new THREE.Vector3(1, 1, 1).multiply(skullR); skullFront.z *= 0.92;
+  for (const s of [-1, 1]) {
+    const geo = new THREE.ExtrudeGeometry(shape, { depth: 1.0, bevelEnabled: false, curveSegments: 24 });
+    geo.translate(-2.2, -0.9, 0); // centre the eye on its own middle
+    geo.scale(1.4, 1.4, 1);
+    if (s < 0) { // mirror for the left eye (and keep the faces pointing outwards)
+      geo.scale(-1, 1, 1);
+      const p = geo.getAttribute('position');
+      for (let i = 0; i < p.count; i += 3) {
+        const x = p.getX(i + 1), y = p.getY(i + 1), z = p.getZ(i + 1);
+        p.setXYZ(i + 1, p.getX(i + 2), p.getY(i + 2), p.getZ(i + 2));
+        p.setXYZ(i + 2, x, y, z);
+      }
+    }
+    // place it on the front of the skull, to the side and a little up
+    // the flat front is a few big triangles: split them up so it can bend round the skull
+    const eyeGeo = decalOnEllipsoid(subdivide(geo, 1.2), skullC, skullFront, new THREE.Vector3(s * 0.4, 0.3, 0.87), -0.6);
+    add(upper.group, new THREE.Mesh(eyeGeo, eyeMat));
+  }
+
+  // bottom jaw: a strong rounded chin
+  const bot: HeadOptions = { offset: 4.2, back: 7, lip: 1.8, wall: 3.4, domeFront: 7.5, domeBack: 9, palate: 2.6 };
+  const lPts = outline(lower, bot);
+  const l = shell(lPts, bot, lower.away, skin);
+  const floor = mouthCap(lPts, bot.palate * lower.away, mouth, bot.back, mouthColors);
+  add(lower.group, l.mesh, floor);
+
+  return meshes;
+}

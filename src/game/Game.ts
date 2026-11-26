@@ -387,6 +387,8 @@ export class Game {
         (t.mesh.material as THREE.MeshPhysicalMaterial & { userData: { uniforms: { uGlow: { value: number } } } }).userData.uniforms.uGlow.value = Math.sin(t.glow * Math.PI) * 0.8;
       }
     }
+    // Venom's tongue slithers out whenever no one is brushing (and is pulled in while they are)
+    this.jaws.update(dt, this.phase !== 'brush');
     this.foam.update(dt);
     this.food.update(dt);
     this.sparkles.update(dt);
