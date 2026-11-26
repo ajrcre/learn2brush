@@ -247,6 +247,30 @@
       "output": "public/audio/en/finish.mp3",
       "note": "English: shipped without review (reviewer only reviews Hebrew)",
       "approvedAt": "2026-11-26T06:30:22.655488+00:00"
+    },
+    "vline2:he:welcome": {
+      "status": "approved",
+      "choice": "v1",
+      "source": "review/voice-r2b/he/welcome.mp3",
+      "output": "public/audio/he/welcome.mp3",
+      "note": "",
+      "approvedAt": "2026-11-26T06:37:55.854793+00:00"
+    },
+    "vline2:he:paste_too_much": {
+      "status": "approved",
+      "choice": "v1",
+      "source": "review/voice-r2b/he/paste_too_much.mp3",
+      "output": "public/audio/he/paste_too_much.mp3",
+      "note": "",
+      "approvedAt": "2026-11-26T06:37:55.854793+00:00"
+    },
+    "vline2:he:hint_inside": {
+      "status": "approved",
+      "choice": "v1",
+      "source": "review/voice-r2b/he/hint_inside.mp3",
+      "output": "public/audio/he/hint_inside.mp3",
+      "note": "",
+      "approvedAt": "2026-11-26T06:37:55.854793+00:00"
     }
   }
 }
