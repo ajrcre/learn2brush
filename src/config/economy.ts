@@ -51,16 +51,16 @@ export const REWARDS = {
 
 /** Items still waiting for approval only show when the game runs with ?review */
 export const REVIEW_MODE = typeof location !== 'undefined' && new URLSearchParams(location.search).has('review');
-/** Animal jaws still in review: playable with ?review, "coming soon" otherwise. (The goat and the alligator are live.) */
+/** Animal jaws still in review: playable with ?review, "coming soon" otherwise. (The goat, lion, alligator and Venom are live.) */
 const JAW_SOON = !REVIEW_MODE;
 
 export const CATALOG: Item[] = [
   // jaws — the big goals (3D models: src/game/jaws/species.ts)
   { id: 'jaw_human', cat: 'jaw', price: 0, name: { en: 'Kid teeth', he: 'שִׁנַּיִם שֶׁל יְלָדִים' }, colors: ['#ffffff'], emoji: '😁' },
   { id: 'jaw_goat', cat: 'jaw', price: 150, name: { en: 'Goat', he: 'עֵז' }, colors: ['#e8dcc8'], emoji: '🐐' },
-  { id: 'jaw_lion', cat: 'jaw', price: 350, name: { en: 'Lion', he: 'אַרְיֵה' }, colors: ['#e3a948'], emoji: '🦁', comingSoon: JAW_SOON },
+  { id: 'jaw_lion', cat: 'jaw', price: 350, name: { en: 'Lion', he: 'אַרְיֵה' }, colors: ['#e3a948'], emoji: '🦁' },
   { id: 'jaw_alligator', cat: 'jaw', price: 700, name: { en: 'Alligator', he: 'תַּנִּין' }, colors: ['#5f8f3e'], emoji: '🐊' },
-  { id: 'jaw_venom', cat: 'jaw', price: 900, name: { en: 'Venom', he: 'וֶנוֹם' }, colors: ['#15171f'], emoji: '👅', hard: true, comingSoon: JAW_SOON },
+  { id: 'jaw_venom', cat: 'jaw', price: 900, name: { en: 'Venom', he: 'וֶנוֹם' }, colors: ['#15171f'], emoji: '👅', hard: true },
   { id: 'jaw_shark', cat: 'jaw', price: 1200, name: { en: 'Shark', he: 'כָּרִישׁ' }, colors: ['#6b8fa8'], emoji: '🦈', comingSoon: JAW_SOON },
   // brush type
   { id: 'type_manual', cat: 'brushType', price: 0, name: { en: 'Classic brush', he: 'מִבְרֶשֶׁת רְגִילָה' }, colors: ['#ffffff'], emoji: '🪥' },
