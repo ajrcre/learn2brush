@@ -11,8 +11,7 @@ export interface Item {
   /** colours used for rendering + swatch */
   colors: string[];
   sparkle?: boolean;
-  /** shown but locked ("soon"); 'review' = built and waiting for approval: playable only with ?review */
-  comingSoon?: boolean | 'review';
+  comingSoon?: boolean;
   emoji?: string;
   /** handle: surface pattern (see game/patterns.ts) */
   pattern?: string;
@@ -48,13 +47,18 @@ export const REWARDS = {
   steadyBonus: 3,
 };
 
+/** Items still waiting for approval only show when the game runs with ?review */
+export const REVIEW_MODE = typeof location !== 'undefined' && new URLSearchParams(location.search).has('review');
+/** Animal jaws still in review: playable with ?review, "coming soon" otherwise. (The alligator is live.) */
+const JAW_SOON = !REVIEW_MODE;
+
 export const CATALOG: Item[] = [
-  // jaws — the big goals
+  // jaws — the big goals (3D models: src/game/jaws/species.ts)
   { id: 'jaw_human', cat: 'jaw', price: 0, name: { en: 'Kid teeth', he: 'שִׁנַּיִם שֶׁל יְלָדִים' }, colors: ['#ffffff'], emoji: '😁' },
-  { id: 'jaw_goat', cat: 'jaw', price: 150, name: { en: 'Goat', he: 'עֵז' }, colors: ['#e8dcc8'], emoji: '🐐', comingSoon: 'review' },
-  { id: 'jaw_lion', cat: 'jaw', price: 350, name: { en: 'Lion', he: 'אַרְיֵה' }, colors: ['#e3a948'], emoji: '🦁', comingSoon: true },
-  { id: 'jaw_alligator', cat: 'jaw', price: 700, name: { en: 'Alligator', he: 'תַּנִּין' }, colors: ['#5f8f3e'], emoji: '🐊', comingSoon: true },
-  { id: 'jaw_shark', cat: 'jaw', price: 1200, name: { en: 'Shark', he: 'כָּרִישׁ' }, colors: ['#6b8fa8'], emoji: '🦈', comingSoon: true },
+  { id: 'jaw_goat', cat: 'jaw', price: 150, name: { en: 'Goat', he: 'עֵז' }, colors: ['#e8dcc8'], emoji: '🐐', comingSoon: JAW_SOON },
+  { id: 'jaw_lion', cat: 'jaw', price: 350, name: { en: 'Lion', he: 'אַרְיֵה' }, colors: ['#e3a948'], emoji: '🦁', comingSoon: JAW_SOON },
+  { id: 'jaw_alligator', cat: 'jaw', price: 700, name: { en: 'Alligator', he: 'תַּנִּין' }, colors: ['#5f8f3e'], emoji: '🐊' },
+  { id: 'jaw_shark', cat: 'jaw', price: 1200, name: { en: 'Shark', he: 'כָּרִישׁ' }, colors: ['#6b8fa8'], emoji: '🦈', comingSoon: JAW_SOON },
   // brush type
   { id: 'type_manual', cat: 'brushType', price: 0, name: { en: 'Classic brush', he: 'מִבְרֶשֶׁת רְגִילָה' }, colors: ['#ffffff'], emoji: '🪥' },
   { id: 'type_electric', cat: 'brushType', price: 300, name: { en: 'Electric brush', he: 'מִבְרֶשֶׁת חַשְׁמַלִּית' }, colors: ['#7cf3ff'], emoji: '⚡' },
@@ -106,11 +110,7 @@ export const CATALOG: Item[] = [
   { id: 'paste_galaxy', cat: 'paste', price: 160, name: { en: 'Galaxy', he: 'גָּלַקְסְיָה' }, colors: ['#2b1b6e', '#6a3bd1', '#e04fd6'], stripes: 'even', glitter: 1 },
 ];
 
-/** Items still waiting for approval only show when the game runs with ?review */
-export const REVIEW_MODE = typeof location !== 'undefined' && new URLSearchParams(location.search).has('review');
 export const isVisible = (i: Item) => i.status !== 'review' || REVIEW_MODE;
-/** Locked as "coming soon" right now? */
-export const isComingSoon = (i: Item) => i.comingSoon === true || (i.comingSoon === 'review' && !REVIEW_MODE);
 /** Use the item's new (pattern/glitter) look? */
 export const useUpgrade = (i: Item) => i.upgrade !== 'review' || REVIEW_MODE;
 
@@ -121,6 +121,6 @@ export const DEFAULT_EQUIPPED: Record<Category, string> = {
 };
 
 export function nextGoal(stars: number, owned: string[]): Item | undefined {
-  const open = CATALOG.filter(i => isVisible(i) && !isComingSoon(i) && !owned.includes(i.id) && i.price > 0).sort((a, b) => a.price - b.price);
+  const open = CATALOG.filter(i => isVisible(i) && !i.comingSoon && !owned.includes(i.id) && i.price > 0).sort((a, b) => a.price - b.price);
   return open.find(i => i.price > stars) ?? open[0];
 }

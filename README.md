@@ -8,13 +8,15 @@ npm install
 npm run dev        # http://localhost:5173
 npm run build      # type-check + production build (dist/)
 ```
-Dev URL flags: `?review` (show items waiting for approval, e.g. the goat jaws), `?unlockall` (everything unlocked), `?q=high|medium|low` (force render quality).
+Dev URL flags: `?unlockall` (review mode, everything unlocked), `?q=high|medium|low` (force render quality).
 
 ## Stack
 Vite + TypeScript + React (UI only) + plain Three.js (scene) with `postprocessing` + N8AO, zustand, idb-keyval, vite-plugin-pwa.
 
 ## Code map
-- `src/game/jaws/` – code-built teeth and gums; per-vertex plaque, side classification (outer/inner/chewing), cleaning. `designs.ts` lays out each animal: kid teeth (20 baby teeth) and goat (20 milk teeth: dental pad instead of upper front teeth, 8 spade-shaped lower front teeth, a toothless gap, ridged cheek teeth).
+- `src/game/jaws/` – code-built teeth and gums; per-vertex plaque, side classification (outer/inner/chewing), cleaning.
+  `species.ts` describes each set of jaws (kid baby teeth, goat, lion, alligator, shark): tooth shapes per half arch, arch outline, gum/enamel colours, camera framing. `Jaws.ts` builds any of them; `toothGeometry.ts` has the tooth shapes (incisor, canine, molar, fang, cone, blade, carnassial, grinder).
+  `heads.ts` builds an animal head around the jaws (prototype: alligator). The head starts at the gum line and grows away from the teeth, so every tooth can still be brushed; head meshes block taps and arrows but are never cleaned.
 - `src/game/materials.ts` – enamel and gum shaders (wet clearcoat, fake translucency, plaque blend).
 - `src/game/Brush.ts`, `Paste.ts`, `Effects.ts` (foam, bubbles, sparkles), `Food.ts` (leftovers).
 - `src/game/Game.ts` – phases, camera, input, brushing logic, progress events.

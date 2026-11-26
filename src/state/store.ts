@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { get as idbGet, set as idbSet } from 'idb-keyval';
-import { DEFAULT_EQUIPPED, REWARDS, STARTER, isComingSoon, item, type Category, type Lang } from '../config/economy';
+import { DEFAULT_EQUIPPED, REWARDS, STARTER, item, type Category, type Lang } from '../config/economy';
 
 export type Screen = 'home' | 'choose' | 'paste' | 'brush' | 'celebrate' | 'shop';
 
@@ -70,7 +70,7 @@ export const useStore = create<State>((set, get) => ({
   buy: (id) => {
     const p = get().profile;
     const it = item(id);
-    if (p.owned.includes(id) || p.stars < it.price || isComingSoon(it)) return false;
+    if (p.owned.includes(id) || p.stars < it.price || it.comingSoon) return false;
     const profile = { ...p, stars: p.stars - it.price, owned: [...p.owned, id], equipped: { ...p.equipped, [it.cat]: id } };
     set({ profile }); persist(profile);
     return true;

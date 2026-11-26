@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Jaws, Tooth } from './jaws/Jaws';
-import { isGrinder, rng } from './jaws/toothGeometry';
+import { FLAT_TOP, rng } from './jaws/toothGeometry';
 
 type Kind = 'crumb' | 'spinach' | 'seed' | 'popcorn' | 'chocolate';
 
@@ -13,9 +13,6 @@ interface Bit {
   vel: THREE.Vector3;
   spin: THREE.Vector3;
   age: number;
-  /** resting position (food-group space) and the jaw's height when it was placed */
-  rest: THREE.Vector3;
-  jawY0: number;
 }
 
 function displaced(geo: THREE.BufferGeometry, amt: number, seed: number) {
@@ -102,7 +99,7 @@ export class FoodBits {
       const { w, t, h, kind: tk } = tooth.spec;
       const local = new THREE.Vector3();
       const localN = new THREE.Vector3();
-      const onTop = isGrinder(tk) && (kind === 'seed' || kind === 'popcorn' || kind === 'crumb' || r() < 0.4);
+      const onTop = FLAT_TOP.includes(tk) && (kind === 'seed' || kind === 'popcorn' || kind === 'crumb' || r() < 0.4);
       if (onTop) {
         local.set((r() - 0.5) * w * 0.3, h * 0.92, (r() - 0.5) * t * 0.2);
         localN.set(0, 1, 0);
@@ -122,12 +119,11 @@ export class FoodBits {
       mesh.userData.food = true;
       mesh.userData.normal = nWorld;
       this.group.add(mesh);
-      this.bits.push({ kind, mesh, tooth, hp: kind === 'spinach' || kind === 'chocolate' ? 1.4 : 0.9, falling: false, vel: new THREE.Vector3(), spin: new THREE.Vector3(), age: 0, rest: mesh.position.clone(), jawY0: parent.position.y });
+      this.bits.push({ kind, mesh, tooth, hp: kind === 'spinach' || kind === 'chocolate' ? 1.4 : 0.9, falling: false, vel: new THREE.Vector3(), spin: new THREE.Vector3(), age: 0 });
     }
   }
 
-  /** Bits still stuck on a jaw that is on screen. */
-  meshes() { return this.bits.filter(b => !b.falling && b.tooth.mesh.parent!.visible).map(b => b.mesh); }
+  meshes() { return this.bits.filter(b => !b.falling).map(b => b.mesh); }
 
   private wp = new THREE.Vector3();
 
@@ -161,14 +157,7 @@ export class FoodBits {
 
   update(dt: number) {
     for (const b of this.bits) {
-      if (!b.falling) {
-        // ride along when the upper or lower jaw slides away (top/bottom views), and hide with it
-        const jaw = b.tooth.mesh.parent!;
-        b.mesh.position.set(b.rest.x, b.rest.y + jaw.position.y - b.jawY0, b.rest.z);
-        b.mesh.visible = jaw.visible;
-        continue;
-      }
-      if (!b.mesh.parent) continue;
+      if (!b.falling || !b.mesh.parent) continue;
       b.age += dt;
       b.vel.y -= 260 * dt;
       b.mesh.position.addScaledVector(b.vel, dt);

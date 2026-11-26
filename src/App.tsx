@@ -33,10 +33,11 @@ export default function App() {
     if (!canvasRef.current || gameSingleton) return;
     const l = looks(useStore.getState().profile);
     gameSingleton = new Game(canvasRef.current, l.brush, l.paste);
+    gameSingleton.setJaw(jawFor(useStore.getState().profile));
     gameSingleton.start();
     (window as unknown as { __game: Game }).__game = gameSingleton;
     // hooks for the automated render / review scripts
-    Object.assign(window, { __looks: looks, __store: useStore, __catalog: CATALOG });
+    Object.assign(window, { __looks: looks, __jawFor: jawFor, __store: useStore, __catalog: CATALOG });
     setGame(gameSingleton);
     requestAnimationFrame(() => requestAnimationFrame(() => { (window as unknown as { __ready: boolean }).__ready = true; }));
   }, []);
@@ -49,7 +50,7 @@ export default function App() {
     game.setBrushLook(l.brush);
     game.setPasteLook(l.paste);
   }, [game, eq.brushType, eq.handle, eq.bristles, eq.paste]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { game?.setJaw(jawFor(profile)); }, [game, eq.jaw]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (game) game.setJaw(jawFor(profile)); }, [game, eq.jaw, loaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // map UI screens to 3D phases
   useEffect(() => {

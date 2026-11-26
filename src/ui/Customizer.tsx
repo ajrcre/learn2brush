@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Game } from '../game/Game';
 import { useStore } from '../state/store';
-import { CATALOG, isComingSoon, isVisible, type Category, type Item } from '../config/economy';
+import { CATALOG, isVisible, type Category, type Item } from '../config/economy';
 import { useT } from '../i18n/ui';
 import { audio, haptic } from '../audio/audio';
 import { jawFor, looks } from './looks';
@@ -75,12 +75,15 @@ export function Customizer({ game, mode, top }: { game: Game; mode: 'choose' | '
     setIndex(equippedIndex);
     requestAnimationFrame(() => scrollToIndex(equippedIndex, false));
     game.setShowcasePaste(tab === 'paste');
+    if (tab !== 'jaw') { game.setShowcaseJaw(null); game.setJaw(jawFor(useStore.getState().profile)); }
   }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // the centred item: put it on (owned) or try it on (locked)
   useEffect(() => {
     if (!current) return;
-    if (owns(current.id) && !isComingSoon(current)) {
+    // teeth tab: show the jaws themselves (an animal that's coming soon has no model yet)
+    if (current.cat === 'jaw') game.setShowcaseJaw(current.comingSoon ? null : current.id);
+    if (owns(current.id) && !current.comingSoon) {
       if (profile.equipped[current.cat] !== current.id) equip(current.cat, current.id);
       const l = looks(useStore.getState().profile, { [current.cat]: current.id });
       game.setBrushLook(l.brush); game.setPasteLook(l.paste);
@@ -90,20 +93,13 @@ export function Customizer({ game, mode, top }: { game: Game; mode: 'choose' | '
     }
   }, [current?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // jaw tab: show the centred animal's jaws instead of the brush (locked ones too, as a teaser)
-  useEffect(() => {
-    if (tab === 'jaw' && current) game.setJawPreview(current.id);
-    else { game.setJawPreview(null); game.setJaw(jawFor(useStore.getState().profile)); }
-  }, [tab, current?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-
   // leaving: show what's really equipped
   useEffect(() => () => {
-    const p = useStore.getState().profile;
-    const l = looks(p);
+    const l = looks(useStore.getState().profile);
     game.setBrushLook(l.brush); game.setPasteLook(l.paste);
     game.setShowcasePaste(false);
-    game.setJawPreview(null);
-    game.setJaw(jawFor(p));
+    game.setShowcaseJaw(null);
+    game.setJaw(jawFor(useStore.getState().profile));
   }, [game]);
 
   const onScroll = () => {
@@ -170,9 +166,9 @@ export function Customizer({ game, mode, top }: { game: Game; mode: 'choose' | '
       </div>
       <div className="swipe-zone" onPointerDown={onDown} onPointerUp={onUp} onPointerCancel={() => { swipe.current = null; }} />
       <div className={`status-row ${burst ? 'burst' : ''}`}>
-        {current && (own && !isComingSoon(current)
+        {current && (own && !current.comingSoon
           ? <span className="pill ok">✔ {current.name[lang]}</span>
-          : isComingSoon(current)
+          : current.comingSoon
             ? <span className="pill lock">🔒 {current.name[lang]} · {t('soon')}</span>
             : afford
               ? <button className="big unlock" onClick={doBuy}>🔓 {current.name[lang]} · ⭐{current.price}</button>
@@ -190,7 +186,7 @@ export function Customizer({ game, mode, top }: { game: Game; mode: 'choose' | '
           {items.map((it, i) => {
             const o = owns(it.id);
             return (
-              <button key={it.id} className={`slide ${i === index ? 'center' : ''} ${o && !isComingSoon(it) ? 'own' : 'locked'}`} onClick={() => scrollToIndex(i)}>
+              <button key={it.id} className={`slide ${i === index ? 'center' : ''} ${o && !it.comingSoon ? 'own' : 'locked'}`} onClick={() => scrollToIndex(i)}>
                 <span className="art">{it.emoji && (it.cat === 'jaw' || it.cat === 'brushType' || it.cat === 'shape') ? <span className="emoji">{it.emoji}</span> : <Swatch it={it} size="lg" />}</span>
                 <span className="name">{it.name[lang]}</span>
                 {!o && <span className="lock-badge">🔒</span>}

@@ -108,7 +108,11 @@ export class Brush {
     const info = { length, radius: radiusFn(profile), ySquash, material: mat, accent: L.accent };
     const parts = buildShape(shape, info);
     mat.userData.uniforms.uBladeEnd.value = parts.bladeEnd ?? 0;
-    if (parts.pattern) setPattern(mat, parts.pattern.pattern, parts.pattern.colors);
+    if (parts.pattern) {
+      // the dinosaur's scales take the chosen colour; patterned handles (tiger, galaxy…) keep their pattern
+      const plain = !L.pattern && L.handle.length === 1;
+      if (plain) setPattern(mat, parts.pattern.pattern, dinoSkinColors(L.handle[0]) ?? parts.pattern.colors);
+    }
     const geo = new THREE.LatheGeometry(profile.map(([x, r]) => new THREE.Vector2(r, x)), segments);
     geo.rotateZ(-Math.PI / 2); // lathe axis Y → X
     geo.scale(1, ySquash, 1);
@@ -127,7 +131,7 @@ export class Brush {
     this.clear();
     const L = this.look;
     const headTop = this.bristleLen; // bristle base plane
-    const headColor = L.shape === 'dino' ? '#2e7d32' : (L.head ?? L.handle[0]);
+    const headColor = L.shape === 'dino' && !L.pattern && L.handle.length === 1 ? (dinoSkinColors(L.handle[0])?.[1] ?? '#2e7d32') : (L.head ?? L.handle[0]);
     if (L.type === 'manual') {
       const head = new THREE.Mesh(new RoundedBoxGeometry(21, 3.2, 9.5, 4, 1.4), this.plastic(headColor));
       head.position.set(0, headTop + 1.6, 0);
@@ -238,4 +242,15 @@ export class Brush {
       this.handleMat.emissive.setHSL((this.t * 0.1) % 1, 0.7, 0.08);
     }
   }
+}
+
+/** Dinosaur skin colours (scales, dark patches, belly) for a plain handle colour; null = default white handle → classic green. */
+function dinoSkinColors(color: string): string[] | null {
+  const c = new THREE.Color(color);
+  const hsl = { h: 0, s: 0, l: 0 };
+  c.getHSL(hsl);
+  if (Math.min(c.r, c.g, c.b) > 0.75 && Math.max(c.r, c.g, c.b) - Math.min(c.r, c.g, c.b) < 0.1) return null; // white-ish
+  const dark = new THREE.Color().setHSL(hsl.h, Math.min(1, hsl.s * 1.05), hsl.l * 0.55);
+  const belly = new THREE.Color().setHSL(hsl.h, hsl.s * 0.65, hsl.l + (1 - hsl.l) * 0.55);
+  return [`#${c.getHexString()}`, `#${dark.getHexString()}`, `#${belly.getHexString()}`];
 }
